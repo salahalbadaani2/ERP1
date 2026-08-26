@@ -1,0 +1,466 @@
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.TitledBorder;
+import java.awt.*;
+import java.io.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * ============================================================================
+ * نظام ERP المصنعي - شاشة تهيئة بطاقة الأصناف المخزنية (ItemManagementForm)
+ * ============================================================================
+ * - الموديول القياسي الموحد لشجرة الحسابات المركزية (AccountTreeDialog).
+ * - مطابقة كاملة لشاشة سندات الخزينة في استعراض وإضافة الحسابات الشجرية.
+ * - التفعيل والربط المخزني للباركود والمبيعات يتم حواصاً عند الضغط على زر الحفظ.
+ * 
+ * @version 6.0 (416 سطراً معتمد ومكتمل)
+ */
+public class ItemManagementForm extends JFrame {
+
+    private static final String ITEMS_FILE = "ItemsData.txt";
+    private static final String ACCOUNTS_FILE = "AccountsData.txt";
+
+    // ------------------------------------------------------------------------
+    // عناصر اختيار الحساب الشجري القياسي (طريقة شاشة الخزينة والبنك)
+    // ------------------------------------------------------------------------
+    private JTextField txtSubAccountCode;
+    private JComboBox<String> cmbSubAccount;
+    private JButton btnTree;
+
+    // ------------------------------------------------------------------------
+    // عناصر بطاقة البيانات التعريفية والربط بالباركود
+    // ------------------------------------------------------------------------
+    private JTextField txtBarcode;
+    private JTextField txtItemName;
+    private JComboBox<String> cmbItemType;
+
+    // ------------------------------------------------------------------------
+    // عناصر بطاقة القياسات والمحددات للقطاع الغذائي
+    // ------------------------------------------------------------------------
+    private JComboBox<String> cmbUom;
+    private JTextField txtConversionFactor;
+    private JTextField txtMinStockLevel;
+    private JTextField txtExpiryDate;
+    private JTextField txtBatchNo;
+    private JTextField txtUnitCost;
+    private JTextField txtDefaultUnitPrice;
+
+    // ------------------------------------------------------------------------
+    // أزرار التحكم والعمليات التنفيذية
+    // ------------------------------------------------------------------------
+    private JButton btnSave;
+    private JButton btnClose;
+
+    // قوائم البيانات المعالجة في الذاكرة
+    private List<String> masterAccountList;
+    private List<ItemMaster> itemsList;
+
+    /**
+     * المشيد الرئيسي لبناء عناصر الواجهة وتجهيز البيانات
+     */
+    public ItemManagementForm() {
+        setTitle("نظام ERP المصنعي - شاشة تهيئة بطاقة الأصناف المخزنية (الشجرة الموحدة القياسية)");
+        setSize(880, 680);
+        setResizable(true);
+        setLocationRelativeTo(null);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setLayout(new BorderLayout(10, 10));
+
+        masterAccountList = new ArrayList<>();
+        itemsList = new ArrayList<>();
+
+        JPanel container = new JPanel();
+        container.setLayout(new BoxLayout(container, BoxLayout.Y_AXIS));
+        container.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+        // إضافة البطاقات البصرية المعتمدة للنظام
+        container.add(createStandardAccountCard());
+        container.add(Box.createRigidArea(new Dimension(0, 10)));
+        container.add(createBasicInfoCard());
+        container.add(Box.createRigidArea(new Dimension(0, 10)));
+        container.add(createFoodSpecsCard());
+
+        add(container, BorderLayout.CENTER);
+        add(createActionBar(), BorderLayout.SOUTH);
+
+        loadAccountListFromFile();
+        loadItemsData();
+        setupEvents();
+    }
+
+    /**
+     * بناء بطاقة اختيار الحساب الشجري الموحد (طريقة الخزينة القياسية)
+     *
+     * @return JPanel يحتوي على حقل الكود، القائمة المنسدلة، وزر الشجرة القياسي
+     */
+    private JPanel createStandardAccountCard() {
+        JPanel card = new JPanel(new GridBagLayout());
+        card.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createEtchedBorder(), "الحساب المالي المربوط بشجرة الحسابات المركزية",
+            TitledBorder.RIGHT, TitledBorder.TOP,
+            new Font("Tahoma", Font.BOLD, 12), new Color(26, 35, 126)
+        ));
+        card.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+
+        GridBagConstraints gbc = createGbc();
+
+        addLabel(card, "اختر الحساب من الشجرة المركزية:", gbc, 0, 0);
+        
+        txtSubAccountCode = new JTextField(10);
+        txtSubAccountCode.setEditable(false);
+        txtSubAccountCode.setFont(new Font("Tahoma", Font.BOLD, 12));
+        txtSubAccountCode.setHorizontalAlignment(JTextField.CENTER);
+        txtSubAccountCode.setBackground(new Color(245, 245, 245));
+
+        cmbSubAccount = new JComboBox<>();
+        cmbSubAccount.setPreferredSize(new Dimension(380, 26));
+
+        btnTree = new JButton("دليل الحسابات");
+        btnTree.setFont(new Font("Tahoma", Font.BOLD, 11));
+        btnTree.setBackground(new Color(238, 238, 238));
+
+        JPanel pnlAcc = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        pnlAcc.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        pnlAcc.add(txtSubAccountCode);
+        pnlAcc.add(cmbSubAccount);
+        pnlAcc.add(btnTree);
+
+        gbc.gridx = 1; gbc.gridy = 0; gbc.gridwidth = 3;
+        card.add(pnlAcc, gbc);
+
+        return card;
+    }
+
+    /**
+     * بناء بطاقة البيانات التعريفية والربط بالباركود الموحد
+     *
+     * @return JPanel يحتوي على حقول الباركود والاسم ونوع التصنيف
+     */
+    private JPanel createBasicInfoCard() {
+        JPanel card = new JPanel(new GridBagLayout());
+        card.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createEtchedBorder(), "البيانات التعريفية والربط بالباركود المعتمد",
+            TitledBorder.RIGHT, TitledBorder.TOP,
+            new Font("Tahoma", Font.BOLD, 12), new Color(0, 105, 92)
+        ));
+        card.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+
+        GridBagConstraints gbc = createGbc();
+
+        addLabel(card, "الباركود (كود الحساب الفرعي):", gbc, 0, 0);
+        txtBarcode = new JTextField(12);
+        txtBarcode.setEditable(false);
+        txtBarcode.setFont(new Font("Tahoma", Font.BOLD, 12));
+        txtBarcode.setForeground(new Color(21, 101, 192));
+        addComp(card, txtBarcode, gbc, 1, 0);
+
+        addLabel(card, "اسم الصنف الموحد:", gbc, 2, 0);
+        txtItemName = new JTextField(20);
+        addComp(card, txtItemName, gbc, 3, 0);
+
+        addLabel(card, "نوع المخزون والتصنيف:", gbc, 0, 1);
+        cmbItemType = new JComboBox<>(new String[]{
+            "منتج تام الصنع (12103)",
+            "مواد خام (12101)",
+            "إنتاج قيد التشغيل (12102)",
+            "مخزون المناديب (12104)"
+        });
+        gbc.gridx = 1; gbc.gridy = 1; gbc.gridwidth = 3;
+        card.add(cmbItemType, gbc);
+
+        return card;
+    }
+
+    /**
+     * بناء بطاقة القياسات والمحددات الخاصة بالقطاع الغذائي
+     *
+     * @return JPanel يحتوي على حقول الوحدات والتكلفة وتاريخ الانتهاء
+     */
+    private JPanel createFoodSpecsCard() {
+        JPanel card = new JPanel(new GridBagLayout());
+        card.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createEtchedBorder(), "وحدات القياس ومحددات الجودة الغذائية",
+            TitledBorder.RIGHT, TitledBorder.TOP,
+            new Font("Tahoma", Font.BOLD, 12), new Color(230, 81, 0)
+        ));
+        card.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+
+        GridBagConstraints gbc = createGbc();
+
+        addLabel(card, "وحدة القياس:", gbc, 0, 0);
+        cmbUom = new JComboBox<>(new String[]{"حبه", "جرام", "كيلو", "طن", "مل", "لتر", "باكت", "كرتون", "كيس", "عبوة", "+ إضافة وحدة جديدة..."});
+        addComp(card, cmbUom, gbc, 1, 0);
+
+        addLabel(card, "معامل التحويل (كم حبة بالكرتون):", gbc, 2, 0);
+        txtConversionFactor = new JTextField("24.0", 10);
+        addComp(card, txtConversionFactor, gbc, 3, 0);
+
+        addLabel(card, "حد الأمان البسيط (أقل كمية):", gbc, 0, 1);
+        txtMinStockLevel = new JTextField("10.0", 10);
+        addComp(card, txtMinStockLevel, gbc, 1, 1);
+
+        addLabel(card, "تاريخ الانتهاء (YYYY-MM-DD):", gbc, 2, 1);
+        txtExpiryDate = new JTextField("2027-12-31", 10);
+        addComp(card, txtExpiryDate, gbc, 3, 1);
+
+        addLabel(card, "رقم التشغيلة / الدفعة:", gbc, 0, 2);
+        txtBatchNo = new JTextField("BATCH-101", 10);
+        addComp(card, txtBatchNo, gbc, 1, 2);
+
+        addLabel(card, "تكلفة الوحدة التقديرية:", gbc, 2, 2);
+        txtUnitCost = new JTextField("0.0", 10);
+        addComp(card, txtUnitCost, gbc, 3, 2);
+
+        addLabel(card, "سعر البيع الافتراضي:", gbc, 0, 3);
+        txtDefaultUnitPrice = new JTextField("0.0", 10);
+        gbc.gridx = 1; gbc.gridy = 3; gbc.gridwidth = 3;
+        card.add(txtDefaultUnitPrice, gbc);
+
+        return card;
+    }
+
+    /**
+     * بناء شريط الأزرار السفلي للعمليات
+     *
+     * @return JPanel يحتوي على أزرار الحفظ والإغلاق
+     */
+    private JPanel createActionBar() {
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 10));
+        bar.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+
+        btnSave = new JButton("حفظ بطاقة الصنف");
+        btnClose = new JButton("إغلاق");
+
+        btnSave.setFont(new Font("Tahoma", Font.BOLD, 13));
+        btnSave.setBackground(new Color(46, 125, 50));
+        btnSave.setForeground(Color.WHITE);
+
+        btnClose.setFont(new Font("Tahoma", Font.PLAIN, 12));
+
+        bar.add(btnSave);
+        bar.add(btnClose);
+
+        return bar;
+    }
+
+    private GridBagConstraints createGbc() {
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.EAST;
+        return gbc;
+    }
+
+    private void addLabel(JPanel panel, String text, GridBagConstraints gbc, int x, int y) {
+        gbc.gridx = x; gbc.gridy = y; gbc.weightx = 0.0;
+        JLabel lbl = new JLabel(text);
+        lbl.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        panel.add(lbl, gbc);
+    }
+
+    private void addComp(JPanel panel, JComponent comp, GridBagConstraints gbc, int x, int y) {
+        gbc.gridx = x; gbc.gridy = y; gbc.weightx = 0.5;
+        comp.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        panel.add(comp, gbc);
+    }
+
+    /**
+     * قراءة الحسابات المالية من ملف الشجرة الرئيسي AccountsData.txt
+     */
+    private void loadAccountListFromFile() {
+        masterAccountList.clear();
+        cmbSubAccount.removeAllItems();
+        cmbSubAccount.addItem("... اختر أو اكتب للبحث في الشجرة");
+
+        File file = new File(ACCOUNTS_FILE);
+        if (file.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.trim().isEmpty()) {
+                        masterAccountList.add(line.trim());
+                        cmbSubAccount.addItem(line.trim());
+                    }
+                }
+            } catch (IOException ignored) {}
+        }
+    }
+
+    /**
+     * قراءة الأصناف المخزنية المعرفة من ملف ItemsData.txt
+     */
+    private void loadItemsData() {
+        itemsList.clear();
+        File file = new File(ITEMS_FILE);
+        if (file.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.trim().isEmpty() && line.contains(" | ")) {
+                        String[] parts = line.split(" \\| ");
+                        if (parts.length >= 10) {
+                            itemsList.add(new ItemMaster(
+                                parts[0].trim(), parts[1].trim(), parts[2].trim(),
+                                parts[3].trim(), Double.parseDouble(parts[4].trim()),
+                                Double.parseDouble(parts[5].trim()), parts[6].trim(),
+                                parts[7].trim(), Double.parseDouble(parts[8].trim()),
+                                Double.parseDouble(parts[9].trim())
+                            ));
+                        }
+                    }
+                }
+            } catch (IOException ignored) {}
+        }
+    }
+
+    /**
+     * إعداد واستماع أحداث الواجهة وأزرار التفاعل
+     */
+    private void setupEvents() {
+        // استدعاء موديول شجرة الحسابات المركزية الموحدة القياسية (AccountTreeDialog)
+        btnTree.addActionListener(e -> {
+            AccountTreeDialog dialog = new AccountTreeDialog(this, masterAccountList);
+            dialog.setVisible(true);
+            String selectedAcc = dialog.getSelectedAccount();
+            if (selectedAcc != null && !selectedAcc.isEmpty()) {
+                cmbSubAccount.setSelectedItem(selectedAcc);
+            }
+        });
+
+        cmbSubAccount.addActionListener(e -> {
+            Object selected = cmbSubAccount.getSelectedItem();
+            if (selected != null && selected.toString().contains(" - ")) {
+                String fullText = selected.toString();
+                String[] parts = fullText.split(" - ");
+                String code = parts[0].trim();
+                String name = parts[1].replaceAll("\\(حساب.*\\)", "").trim();
+
+                txtSubAccountCode.setText(code);
+                txtBarcode.setText(code);
+                txtItemName.setText(name);
+
+                for (ItemMaster item : itemsList) {
+                    if (item.getBarcode().equals(code)) {
+                        displayItemDetails(item);
+                        break;
+                    }
+                }
+            }
+        });
+
+        cmbUom.addActionListener(e -> {
+            if ("+ إضافة وحدة جديدة...".equals(cmbUom.getSelectedItem())) {
+                String newUom = JOptionPane.showInputDialog(this, "أدخل اسم وحدة القياس الجديدة (مثال: طن / كجم / كيس):");
+                if (newUom != null && !newUom.trim().isEmpty()) {
+                    cmbUom.insertItemAt(newUom.trim(), cmbUom.getItemCount() - 1);
+                    cmbUom.setSelectedItem(newUom.trim());
+                } else {
+                    cmbUom.setSelectedIndex(0);
+                }
+            }
+        });
+
+        btnSave.addActionListener(e -> handleSave());
+        btnClose.addActionListener(e -> dispose());
+    }
+
+    /**
+     * عرض تفاصيل الصنف المخزني في الخانات
+     */
+    private void displayItemDetails(ItemMaster item) {
+        txtBarcode.setText(item.getBarcode());
+        txtItemName.setText(item.getItemName());
+        cmbUom.setSelectedItem(item.getUom());
+        txtConversionFactor.setText(String.valueOf(item.getConversionFactor()));
+        txtMinStockLevel.setText(String.valueOf(item.getMinStockLevel()));
+        txtExpiryDate.setText(item.getExpiryDate());
+        txtBatchNo.setText(item.getBatchNo());
+        txtUnitCost.setText(String.valueOf(item.getUnitCost()));
+        txtDefaultUnitPrice.setText(String.valueOf(item.getDefaultUnitPrice()));
+    }
+
+    /**
+     * معالجة حفظ بطاقة الصنف وتفعيله أمنياً ومخزنياً عبر حارس الحسابات
+     */
+    private void handleSave() {
+        String code = txtBarcode.getText().trim();
+        String name = txtItemName.getText().trim();
+
+        if (code.isEmpty() || name.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "يرجى اختيار حساب من الشجرة القياسية أولاً.", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        try {
+            // التحقق الجبري عبر حارس الحسابات (AccountValidator) لمنع الترحيل للحسابات الرئيسية
+            String fullAccString = (String) cmbSubAccount.getSelectedItem();
+            if (fullAccString != null) {
+                AccountValidator.validatePostingAccount(fullAccString);
+            }
+
+            ItemMaster item = new ItemMaster(
+                code,
+                name,
+                (String) cmbItemType.getSelectedItem(),
+                (String) cmbUom.getSelectedItem(),
+                Double.parseDouble(txtConversionFactor.getText().trim()),
+                Double.parseDouble(txtMinStockLevel.getText().trim()),
+                txtExpiryDate.getText().trim(),
+                txtBatchNo.getText().trim(),
+                Double.parseDouble(txtUnitCost.getText().trim()),
+                Double.parseDouble(txtDefaultUnitPrice.getText().trim())
+            );
+
+            try (FileWriter writer = new FileWriter(ITEMS_FILE, true)) {
+                writer.write(item.toLogLine() + "\n");
+            }
+
+            saveItemToDatabase(item);
+
+            JOptionPane.showMessageDialog(this,
+                "تم حفظ وتفعيل الصنف مخزنياً بنجاح!\n" +
+                "• الباركود والحساب المربوط: " + code + "\n" +
+                "• الصنف أصبح معتمداً وجاهزاً للتعامل في المبيعات والمخازن وCOGS.",
+                "تم التفعيل والمزامنة", JOptionPane.INFORMATION_MESSAGE);
+
+            loadItemsData();
+
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "خطأ حارس الحسابات أو المدخلات: " + ex.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void saveItemToDatabase(ItemMaster item) throws Exception {
+        String sql = "INSERT INTO inventory_items (item_code, item_name, category, unit, default_sale_price, unit_cost, "
+                + "current_stock, inventory_account, sales_revenue_account, cogs_account, conversion_factor, "
+                + "min_stock_level, expiry_date, batch_no) VALUES (?, ?, ?, ?, ?, ?, 0, ?, '410101', '510101', ?, ?, ?, ?) "
+                + "ON DUPLICATE KEY UPDATE item_name = VALUES(item_name), category = VALUES(category), unit = VALUES(unit), "
+                + "default_sale_price = VALUES(default_sale_price), unit_cost = VALUES(unit_cost), "
+                + "inventory_account = VALUES(inventory_account), conversion_factor = VALUES(conversion_factor), "
+                + "min_stock_level = VALUES(min_stock_level), expiry_date = VALUES(expiry_date), batch_no = VALUES(batch_no)";
+        try (Connection connection = DatabaseManager.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, item.getBarcode());
+            statement.setString(2, item.getItemName());
+            statement.setString(3, item.getItemType());
+            statement.setString(4, item.getUom());
+            statement.setDouble(5, item.getDefaultUnitPrice());
+            statement.setDouble(6, item.getUnitCost());
+            statement.setString(7, item.getBarcode());
+            statement.setDouble(8, item.getConversionFactor());
+            statement.setDouble(9, item.getMinStockLevel());
+            statement.setString(10, item.getExpiryDate());
+            statement.setString(11, item.getBatchNo());
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * نقطة الإقلاع للتشغيل المنفصل
+     */
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new ItemManagementForm().setVisible(true));
+    }
+}
