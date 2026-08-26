@@ -131,10 +131,15 @@ public class AccountTreeDialog extends JDialog {
      * المشيد الأساسي الذي يستقبل Window المباشر
      */
     public AccountTreeDialog(Window owner, String filterPrefix) {
-        super(owner, "دليل شجرة الحسابات المركزية (Chart of Accounts)", ModalityType.MODELESS);
+        super(owner, "دليل شجرة الحسابات المركزية (Chart of Accounts)", ModalityType.APPLICATION_MODAL);
         this.filterRootCode = filterPrefix;
         this.managementMode = filterPrefix == null;
         this.accountList = new ArrayList<>();
+
+        setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        setResizable(true);
+        getContentPane().setLayout(new BorderLayout(8, 8));
+        setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
 
         // ضبط الحجم ليتناسب مع شاشة العرض دون أن يختفي الشريط السفلي
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
@@ -142,15 +147,15 @@ public class AccountTreeDialog extends JDialog {
         int height = Math.min(640, screenSize.height - 100);
         setSize(width, height);
         setMinimumSize(new Dimension(800, 480));
-        setResizable(true); // تفعيل خاصية التكبير والتصغير للشاشة
         setLocationRelativeTo(owner);
-        setLayout(new BorderLayout(8, 8));
-        setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
 
         initUI();
         loadAccountsData();
         buildTree("");
         setupEvents();
+
+        getContentPane().revalidate();
+        getContentPane().repaint();
     }
 
     private static Window getWindowForComponent(Component comp) {
@@ -178,14 +183,7 @@ public class AccountTreeDialog extends JDialog {
         searchRow.add(txtSearch, BorderLayout.CENTER);
         topContainer.add(searchRow, BorderLayout.NORTH);
 
-        JButton btnMaximize = new JButton("□");
-        btnMaximize.setToolTipText("تكبير / استعادة");
-        btnMaximize.setFont(new Font("Tahoma", Font.BOLD, 14));
-        btnMaximize.setPreferredSize(new Dimension(36, 28));
-        btnMaximize.setMargin(new Insets(0, 0, 0, 0));
-        btnMaximize.addActionListener(e -> toggleMaximize());
-        topContainer.add(btnMaximize, BorderLayout.WEST);
-        add(topContainer, BorderLayout.NORTH);
+        getContentPane().add(topContainer, BorderLayout.NORTH);
 
         // المحتوى الرئيسي (الشجرة + تفاصيل الحساب المحدد)
         rootNode = new DefaultMutableTreeNode("دليل الحسابات المصنعي");
@@ -204,7 +202,7 @@ public class AccountTreeDialog extends JDialog {
                 TitledBorder.TOP,
                 new Font("Tahoma", Font.BOLD, 12)
         ));
-        add(scrollTree, BorderLayout.CENTER);
+        getContentPane().add(scrollTree, BorderLayout.CENTER);
 
         // الشريط السفلي يقتصر على الإغلاق
         JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
@@ -214,7 +212,10 @@ public class AccountTreeDialog extends JDialog {
         btnCancel = new JButton("إغلاق");
         btnCancel.setFont(new Font("Tahoma", Font.PLAIN, 12));
         bottomBar.add(btnCancel);
-        add(bottomBar, BorderLayout.SOUTH);
+        getContentPane().add(bottomBar, BorderLayout.SOUTH);
+
+        getContentPane().revalidate();
+        getContentPane().repaint();
     }
 
     private JPanel createDetailsPanel() {
