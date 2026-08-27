@@ -659,12 +659,32 @@ public class AccountTreeDialog extends JFrame {
 
         int result = JOptionPane.showConfirmDialog(this, form, "تعديل بيانات الحساب", JOptionPane.OK_CANCEL_OPTION);
         if (result == JOptionPane.OK_OPTION) {
-            selectedAccount.setName(txtName.getText().trim());
-            selectedAccount.setType("حساب فرعي".equals(cmbType.getSelectedItem()) ? "فرعي" : "رئيسي");
+            String newName = txtName.getText().trim();
+            boolean targetIsSub = "حساب فرعي".equals(cmbType.getSelectedItem());
+            String newType = targetIsSub ? "فرعي" : "رئيسي";
+            // قيد الأمان المحاسبي: منع تحويل الفرعي إلى رئيسي حال وجود حركات/رصيد
+            boolean convertingToHeader = selectedAccount.isSubAccount() && "رئيسي".equals(newType);
+            if (convertingToHeader) {
+                boolean hasEntries = hasDatabaseTransactions(selectedAccount.getCode())
+                        || AccountValidator.hasFinancialTransactions(selectedAccount.getCode())
+                        || selectedAccount.getBalance() != 0;
+                if (hasEntries) {
+                    JOptionPane.showMessageDialog(this,
+                            "عذراً، لا يمكن تحويل الحساب إلى حساب رئيسي لوجود حركات مالية مسجلة عليه. يُسمح فقط بتعديل اسم الحساب.",
+                            "حظر محاسبي", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+            }
+            selectedAccount.setName(newName);
+            selectedAccount.setType(newType);
             updateAccountInStorage(selectedAccount);
             rewriteAccountsFile();
             buildTree("");
             updateDetailsPanel(selectedAccount);
+            treeAccounts.revalidate();
+            treeAccounts.repaint();
+            getContentPane().revalidate();
+            getContentPane().repaint();
             JOptionPane.showMessageDialog(this, "تم تعديل الحساب");
         }
     }
@@ -809,11 +829,13 @@ public class AccountTreeDialog extends JFrame {
             setLeafIcon(null);
             setOpenIcon(null);
             setClosedIcon(null);
+            setOpaque(true);
         }
 
         @Override
         public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel, boolean expanded, boolean leaf, int row, boolean hasFocus) {
             super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+            setOpaque(true);
 
             if (value instanceof DefaultMutableTreeNode) {
                 DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
