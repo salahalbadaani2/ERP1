@@ -137,10 +137,10 @@ public class MainWindow extends JFrame {
         ));
 
         grid.add(createModuleCard(
-            "الاستلام والصرف المخزني",
-            "فتح شاشة الاستلام أو شاشة الصرف المخزني",
+            "المخازن",
+            "",
             new Color(5, 150, 105), // Emerald
-            () -> chooseWarehouseMovement()
+            () -> new InventoryMainFrame().setVisible(true)
         ));
 
         // 6. التقارير المالية والختامية
@@ -297,12 +297,8 @@ public class MainWindow extends JFrame {
     }
 
     private void chooseWarehouseMovement() {
-        Object choice = JOptionPane.showInputDialog(this, "اختر شاشة الحركة المطلوبة:",
-                "العمليات المخزنية", JOptionPane.PLAIN_MESSAGE, null,
-                new String[] {"الاستلام المخزني", "الصرف المخزني", "تقارير المخزون"}, "الاستلام المخزني");
-        if ("الاستلام المخزني".equals(choice)) new WarehouseOperationsFrame(true).setVisible(true);
-        else if ("الصرف المخزني".equals(choice)) new WarehouseOperationsFrame(false).setVisible(true);
-        else if ("تقارير المخزون".equals(choice)) new WarehouseReportsFrame().setVisible(true);
+        // أبقيت الدالة للتوافق - تم تغيير طريقة العرض فقط من قائمة منبثقة إلى تبويبات داخل InventoryMainFrame
+        new InventoryMainFrame().setVisible(true);
     }
 
     private void openGeneralLedger() {
