@@ -99,7 +99,7 @@ public class ItemManagementForm extends JFrame {
     private JPanel createStandardAccountCard() {
         JPanel card = new JPanel(new GridBagLayout());
         card.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createEtchedBorder(), "الحساب المالي المربوط بشجرة الحسابات المركزية",
+            BorderFactory.createEtchedBorder(), "تهيئة الصنف",
             TitledBorder.RIGHT, TitledBorder.TOP,
             new Font("Tahoma", Font.BOLD, 12), new Color(26, 35, 126)
         ));
@@ -107,8 +107,6 @@ public class ItemManagementForm extends JFrame {
 
         GridBagConstraints gbc = createGbc();
 
-        addLabel(card, "اختر الحساب من الشجرة المركزية:", gbc, 0, 0);
-        
         txtSubAccountCode = new JTextField(10);
         txtSubAccountCode.setEditable(false);
         txtSubAccountCode.setFont(new Font("Tahoma", Font.BOLD, 12));
@@ -122,15 +120,6 @@ public class ItemManagementForm extends JFrame {
         btnTree.setFont(new Font("Tahoma", Font.BOLD, 11));
         btnTree.setBackground(new Color(238, 238, 238));
 
-        JPanel pnlAcc = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
-        pnlAcc.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        pnlAcc.add(txtSubAccountCode);
-        pnlAcc.add(cmbSubAccount);
-        pnlAcc.add(btnTree);
-
-        gbc.gridx = 1; gbc.gridy = 0; gbc.gridwidth = 3;
-        card.add(pnlAcc, gbc);
-
         return card;
     }
 
@@ -142,7 +131,7 @@ public class ItemManagementForm extends JFrame {
     private JPanel createBasicInfoCard() {
         JPanel card = new JPanel(new GridBagLayout());
         card.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createEtchedBorder(), "البيانات التعريفية والربط بالباركود المعتمد",
+            BorderFactory.createEtchedBorder(), "",
             TitledBorder.RIGHT, TitledBorder.TOP,
             new Font("Tahoma", Font.BOLD, 12), new Color(0, 105, 92)
         ));
@@ -157,11 +146,11 @@ public class ItemManagementForm extends JFrame {
         txtBarcode.setForeground(new Color(21, 101, 192));
         addComp(card, txtBarcode, gbc, 1, 0);
 
-        addLabel(card, "اسم الصنف الموحد:", gbc, 2, 0);
+        addLabel(card, "اسم الصنف:", gbc, 2, 0);
         txtItemName = new JTextField(20);
         addComp(card, txtItemName, gbc, 3, 0);
 
-        addLabel(card, "نوع المخزون والتصنيف:", gbc, 0, 1);
+        addLabel(card, "نوع المخزون:", gbc, 0, 1);
         cmbItemType = new JComboBox<>(new String[]{
             "منتج تام الصنع (12103)",
             "مواد خام (12101)",
@@ -237,6 +226,10 @@ public class ItemManagementForm extends JFrame {
         btnSave.setFont(new Font("Tahoma", Font.BOLD, 13));
         btnSave.setBackground(new Color(46, 125, 50));
         btnSave.setForeground(Color.WHITE);
+        btnSave.setEnabled(true);
+        btnSave.setOpaque(true);
+        btnSave.setBorderPainted(true);
+        btnSave.setFocusPainted(false);
 
         btnClose.setFont(new Font("Tahoma", Font.PLAIN, 12));
 
@@ -348,6 +341,25 @@ public class ItemManagementForm extends JFrame {
                         break;
                     }
                 }
+            }
+        });
+
+        txtItemName.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        txtItemName.setToolTipText("انقر لفتح دليل الحسابات - الشجرة الكاملة");
+        txtItemName.setEditable(true);
+        txtItemName.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                AccountTreeDialog dialog = new AccountTreeDialog(ItemManagementForm.this, masterAccountList);
+                dialog.setVisible(true);
+                String selectedAcc = dialog.getSelectedAccount();
+                if (selectedAcc != null && !selectedAcc.isEmpty()) {
+                    cmbSubAccount.setSelectedItem(selectedAcc);
+                }
+            }
+        });
+        txtItemName.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusGained(java.awt.event.FocusEvent e) {
+                txtItemName.selectAll();
             }
         });
 
