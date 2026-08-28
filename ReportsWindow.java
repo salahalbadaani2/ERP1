@@ -52,6 +52,12 @@ public class ReportsWindow extends JFrame {
     private JLabel lblInvLowStock;
     private JLabel lblInvTotalValue;
 
+    // عناصر تبويب المنتجات التامة المنقول من إدارة المخزون بنفس الشكل
+    private JTable tblFg;
+    private DefaultTableModel modelFg;
+    private JLabel lblFgCount;
+    private JLabel lblFgVal;
+
     private static final Font FONT_TITLE = new Font("Tahoma", Font.BOLD, 15);
     private static final Font FONT_HEADER = new Font("Tahoma", Font.BOLD, 12);
     private static final Font FONT_PLAIN = new Font("Tahoma", Font.PLAIN, 12);
@@ -98,6 +104,7 @@ public class ReportsWindow extends JFrame {
         tabbedPane.addTab("حركة الخزينة", createTreasuryReportsPanel());
         tabbedPane.addTab("التدفقات النقدية", createCashFlowPanel());
         tabbedPane.addTab("أرصدة المخزون", createInventoryReportsPanel());
+        tabbedPane.addTab("المنتجات التامة", createFgPanel());
 
         add(tabbedPane, BorderLayout.CENTER);
     }
@@ -228,6 +235,47 @@ public class ReportsWindow extends JFrame {
         return panel;
     }
 
+    // =========================================================================
+    // لوحة المنتجات التامة المنقولة من إدارة المخزون بنفس الشكل والمكونات
+    // =========================================================================
+    private JPanel createFgPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+        JPanel topKpi = new JPanel(new GridLayout(1, 3, 15, 10));
+        topKpi.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        lblFgCount = createKpiCard("عدد الأصناف التامة", "0 صنف", new Color(2, 132, 199), topKpi);
+        lblFgVal = createKpiCard("إجمالي القيمة الدفترية للمخزون التام", "0.00 YER", new Color(16, 185, 129), topKpi);
+        createKpiCard("الحساب المرتبط في الدليل", "12103 - مخزون الإنتاج التام", new Color(71, 85, 105), topKpi);
+        panel.add(topKpi, BorderLayout.NORTH);
+
+        String[] cols = {"كود الصنف", "اسم المنتج التام", "الوحدة", "الرصيد المخزني الفعلي", "حد الطلب الأدنى", "تكلفة الوحدة (COGS)", "إجمالي القيمة (YER)", "الحالة"};
+        modelFg = new DefaultTableModel(cols, 0);
+        tblFg = new JTable(modelFg);
+        setupTable(tblFg);
+
+        panel.add(new JScrollPane(tblFg), BorderLayout.CENTER);
+
+        JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
+        JButton btnRefresh = new JButton("تحديث المخزون");
+        btnRefresh.setFont(FONT_HEADER);
+        btnRefresh.addActionListener(e -> loadFgData());
+        bottom.add(btnRefresh);
+        JButton btnReceipt = new JButton("الاستلام المخزني");
+        btnReceipt.addActionListener(e -> new WarehouseOperationsFrame(true).setVisible(true));
+        JButton btnIssue = new JButton("الصرف المخزني");
+        btnIssue.addActionListener(e -> new WarehouseOperationsFrame(false).setVisible(true));
+        JButton btnReports = new JButton("تقارير المخزون");
+        btnReports.addActionListener(e -> new WarehouseReportsFrame().setVisible(true));
+        bottom.add(btnReceipt);
+        bottom.add(btnIssue);
+        bottom.add(btnReports);
+        panel.add(bottom, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
     private JPanel createCashFlowPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
@@ -310,6 +358,7 @@ public class ReportsWindow extends JFrame {
         loadTreasuryReport();
         loadCashFlowReport();
         loadInventoryReport();
+        loadFgData();
     }
 
     private void loadCashFlowReport() {
@@ -600,6 +649,24 @@ public class ReportsWindow extends JFrame {
         lblInvTotalItems.setText(totalItems + " مستودعات / أصناف");
         lblInvLowStock.setText(lowStockCount > 0 ? (lowStockCount + " أصناف منخفضة") : "متاح");
         lblInvTotalValue.setText(String.format("%,.2f YER", totalValue));
+    }
+
+    private void loadFgData() {
+        modelFg.setRowCount(0);
+        double totalVal = 0.0;
+        int count = 0;
+        Object[][] sampleItems = {
+                        {"FG-101", "عصير مانجو طبيعي 1 لتر", "كرتون (12 حبة)", 450.0, 50.0, 3200.0, 1440000.0, "رصيد كاف"},
+                        {"FG-102", "مياه صحية نقية 500 مل", "بالتة (24 شد)", 1200.0, 100.0, 1800.0, 2160000.0, "رصيد كاف"},
+                {"FG-103", "بسكويت شاي فاخر", "كرتون (48 باكت)", 25.0, 80.0, 4500.0, 112500.0, "تنبيه: تحت حد الطلب"}
+        };
+        for (Object[] row : sampleItems) {
+            count++;
+            totalVal += (double) row[6];
+            modelFg.addRow(row);
+        }
+        lblFgCount.setText(count + " أصناف معتمدة");
+        lblFgVal.setText(String.format("%,.2f YER", totalVal));
     }
 
     // فئة تلوين خلايا الربح والخسارة

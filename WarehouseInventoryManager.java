@@ -20,7 +20,7 @@ public class WarehouseInventoryManager extends JFrame {
 
     private JTabbedPane tabbedPane;
 
-    // جداول المخازن الثلاثة
+    // جداول المخازن المتبقية بعد نقل المنتجات التامة إلى التقارير
     private JTable tblRawMaterials;
     private DefaultTableModel modelRawMaterials;
     private JLabel lblRawVal, lblRawCount;
@@ -28,10 +28,6 @@ public class WarehouseInventoryManager extends JFrame {
     private JTable tblWip;
     private DefaultTableModel modelWip;
     private JLabel lblWipVal, lblWipCount;
-
-    private JTable tblFinishedGoods;
-    private DefaultTableModel modelFinishedGoods;
-    private JLabel lblFgVal, lblFgCount;
 
     private static final Font FONT_TITLE = new Font("Tahoma", Font.BOLD, 15);
     private static final Font FONT_HEADER = new Font("Tahoma", Font.BOLD, 12);
@@ -69,58 +65,18 @@ public class WarehouseInventoryManager extends JFrame {
         header.add(lblSub, BorderLayout.SOUTH);
         add(header, BorderLayout.NORTH);
 
-        // التبويبات الثلاثة للمخازن
+        // التبويبات المتبقية بعد نقل المنتجات التامة إلى التقارير (أصبحت تبويبان)
         tabbedPane = new JTabbedPane();
         tabbedPane.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         tabbedPane.setFont(FONT_HEADER);
 
-        tabbedPane.addTab("1. المنتجات التامة", createFinishedGoodsPanel());
-        tabbedPane.addTab("🌾 2. مخزن المواد الخام والتعبئة (Raw Materials)", createRawMaterialsPanel());
-        tabbedPane.addTab("3. الإنتاج تحت التشغيل", createWipPanel());
+        tabbedPane.addTab("🌾 1. مخزن المواد الخام والتعبئة (Raw Materials)", createRawMaterialsPanel());
+        tabbedPane.addTab("2. الإنتاج تحت التشغيل", createWipPanel());
 
         add(tabbedPane, BorderLayout.CENTER);
     }
 
-    // 1. لوحة مخزن المنتجات التامة
-    private JPanel createFinishedGoodsPanel() {
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
-
-        JPanel topKpi = new JPanel(new GridLayout(1, 3, 15, 10));
-        topKpi.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        lblFgCount = createKpiCard("عدد الأصناف التامة", "0 صنف", new Color(2, 132, 199), topKpi);
-        lblFgVal = createKpiCard("إجمالي القيمة الدفترية للمخزون التام", "0.00 YER", new Color(16, 185, 129), topKpi);
-        createKpiCard("الحساب المرتبط في الدليل", "12103 - مخزون الإنتاج التام", new Color(71, 85, 105), topKpi);
-        panel.add(topKpi, BorderLayout.NORTH);
-
-        String[] cols = {"كود الصنف", "اسم المنتج التام", "الوحدة", "الرصيد المخزني الفعلي", "حد الطلب الأدنى", "تكلفة الوحدة (COGS)", "إجمالي القيمة (YER)", "الحالة"};
-        modelFinishedGoods = new DefaultTableModel(cols, 0);
-        tblFinishedGoods = new JTable(modelFinishedGoods);
-        setupTable(tblFinishedGoods);
-
-        panel.add(new JScrollPane(tblFinishedGoods), BorderLayout.CENTER);
-
-        JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
-                JButton btnRefresh = new JButton("تحديث المخزون");
-        btnRefresh.setFont(FONT_HEADER);
-        btnRefresh.addActionListener(e -> loadFinishedGoodsData());
-        bottom.add(btnRefresh);
-        JButton btnReceipt = new JButton("الاستلام المخزني");
-        btnReceipt.addActionListener(e -> new WarehouseOperationsFrame(true).setVisible(true));
-        JButton btnIssue = new JButton("الصرف المخزني");
-        btnIssue.addActionListener(e -> new WarehouseOperationsFrame(false).setVisible(true));
-        JButton btnReports = new JButton("تقارير المخزون");
-        btnReports.addActionListener(e -> new WarehouseReportsFrame().setVisible(true));
-        bottom.add(btnReceipt);
-        bottom.add(btnIssue);
-        bottom.add(btnReports);
-        panel.add(bottom, BorderLayout.SOUTH);
-
-        return panel;
-    }
-
-    // 2. لوحة مخزن المواد الخام
+    // 1. لوحة مخزن المواد الخام
     private JPanel createRawMaterialsPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
@@ -225,31 +181,8 @@ public class WarehouseInventoryManager extends JFrame {
     }
 
     private void loadAllWarehousesData() {
-        loadFinishedGoodsData();
         loadRawMaterialsData();
         loadWipData();
-    }
-
-    private void loadFinishedGoodsData() {
-        modelFinishedGoods.setRowCount(0);
-        double totalVal = 0.0;
-        int count = 0;
-
-        // أصناف المنتجات التامة المصنعة الفعلية
-        Object[][] sampleItems = {
-                        {"FG-101", "عصير مانجو طبيعي 1 لتر", "كرتون (12 حبة)", 450.0, 50.0, 3200.0, 1440000.0, "رصيد كاف"},
-                        {"FG-102", "مياه صحية نقية 500 مل", "بالتة (24 شد)", 1200.0, 100.0, 1800.0, 2160000.0, "رصيد كاف"},
-                {"FG-103", "بسكويت شاي فاخر", "كرتون (48 باكت)", 25.0, 80.0, 4500.0, 112500.0, "تنبيه: تحت حد الطلب"}
-        };
-
-        for (Object[] row : sampleItems) {
-            count++;
-            totalVal += (double) row[6];
-            modelFinishedGoods.addRow(row);
-        }
-
-        lblFgCount.setText(count + " أصناف معتمدة");
-        lblFgVal.setText(String.format("%,.2f YER", totalVal));
     }
 
     private void loadRawMaterialsData() {
