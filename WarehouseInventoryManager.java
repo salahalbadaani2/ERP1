@@ -112,12 +112,9 @@ public class WarehouseInventoryManager extends JFrame {
         btnIssue.addActionListener(e -> new WarehouseOperationsFrame(false).setVisible(true));
         JButton btnReports = new JButton("تقارير المخزون");
         btnReports.addActionListener(e -> new WarehouseReportsFrame().setVisible(true));
-        JButton btnItemSetup = new JButton("تهيئة بطاقة صنف");
-        btnItemSetup.addActionListener(e -> new ItemManagementForm().setVisible(true));
         bottom.add(btnReceipt);
         bottom.add(btnIssue);
         bottom.add(btnReports);
-        bottom.add(btnItemSetup);
         panel.add(bottom, BorderLayout.SOUTH);
 
         return panel;

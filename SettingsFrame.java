@@ -20,6 +20,9 @@ public class SettingsFrame extends JFrame {
         panel.setBackground(new Color(248, 250, 252));
         panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         // فارغ تماماً - بدون أي أزرار أو محتوى حسب الطلب
+        JButton btnItemSetup = new JButton("تهيئة بطاقة صنف");
+        btnItemSetup.addActionListener(e -> new ItemManagementForm().setVisible(true));
+        panel.add(btnItemSetup, BorderLayout.CENTER);
         add(panel, BorderLayout.CENTER);
     }
 
