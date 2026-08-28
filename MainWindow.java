@@ -128,14 +128,6 @@ public class MainWindow extends JFrame {
             () -> openPurchases()
         ));
 
-        // 5. مخزن المنتجات التامة
-        grid.add(createModuleCard(
-                "مخزون المنتجات",
-                "",
-                new Color(217, 119, 6), // Amber
-                () -> openStore()
-        ));
-
         grid.add(createModuleCard(
             "المخازن",
             "",
