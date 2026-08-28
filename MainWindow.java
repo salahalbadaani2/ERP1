@@ -99,7 +99,7 @@ public class MainWindow extends JFrame {
         // 1. المبيعات
         grid.add(createModuleCard(
             "المبيعات",
-            "فواتير المبيعات ومردودات المبيعات",
+            "",
                 new Color(13, 148, 136), // Teal
             () -> openSales()
         ));
@@ -107,7 +107,7 @@ public class MainWindow extends JFrame {
         // 2. دفتر الأستاذ العام وميزان المراجعة
         grid.add(createModuleCard(
                 "الأستاذ العام وميزان المراجعة",
-                "عرض القيود المرحلة وأرصدة الحسابات والحركات التفصيلية",
+                "",
                 new Color(37, 99, 235), // Blue
                 () -> openGeneralLedger()
         ));
@@ -115,7 +115,7 @@ public class MainWindow extends JFrame {
         // 3. دليل وشجرة الحسابات
         grid.add(createModuleCard(
                 "دليل الحسابات",
-                "إدارة الحسابات الرئيسية والحسابات الفرعية",
+                "",
                 new Color(124, 58, 237), // Violet
                 () -> openAccountTree()
         ));
@@ -123,7 +123,7 @@ public class MainWindow extends JFrame {
         // 4. المشتريات
         grid.add(createModuleCard(
             "المشتريات",
-            "فاتورة المشتريات ودورة التوريد",
+            "",
                 new Color(2, 132, 199), // Sky
             () -> openPurchases()
         ));
@@ -131,7 +131,7 @@ public class MainWindow extends JFrame {
         // 5. مخزن المنتجات التامة
         grid.add(createModuleCard(
                 "مخزون المنتجات",
-                "متابعة الأرصدة والاستلام والصرف والتنبيهات",
+                "",
                 new Color(217, 119, 6), // Amber
                 () -> openStore()
         ));
@@ -146,7 +146,7 @@ public class MainWindow extends JFrame {
         // 6. التقارير المالية والختامية
         grid.add(createModuleCard(
                 "التقارير والقوائم المالية",
-                "تقارير المبيعات والخزينة والمخزون والأستاذ العام",
+                "",
                 new Color(225, 29, 72), // Rose
                 () -> openReports()
         ));
@@ -154,7 +154,7 @@ public class MainWindow extends JFrame {
         // 7. الخزينة
         grid.add(createModuleCard(
             "الخزينة",
-            "سند قبض وسند صرف في شاشات مستقلة",
+            "",
                 new Color(79, 70, 229), // Indigo
                 () -> openTreasury()
         ));
@@ -162,7 +162,7 @@ public class MainWindow extends JFrame {
         // 8. فحص وإدارة قاعدة البيانات
         grid.add(createModuleCard(
                 "إدارة قاعدة البيانات",
-                "فحص الاتصال والجداول وسجلات النظام",
+                "",
                 new Color(71, 85, 105), // Slate
                 () -> openDatabaseAdmin()
         ));
@@ -170,7 +170,7 @@ public class MainWindow extends JFrame {
         // 9. تسجيل الخروج
         grid.add(createModuleCard(
                 "تسجيل الخروج",
-                "إنهاء الجلسة وإغلاق النظام",
+                "",
                 new Color(220, 38, 38), // Red
                 () -> System.exit(0)
         ));
