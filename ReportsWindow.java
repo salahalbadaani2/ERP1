@@ -74,7 +74,7 @@ public class ReportsWindow extends JFrame {
     private static final Font FONT_CARD_VAL = new Font("Tahoma", Font.BOLD, 14);
 
     public ReportsWindow() {
-        setTitle("نظام ERP المصنعي - التقارير المالية");
+        setTitle("نظام ERP المصنعي - التقارير");
         setSize(1180, 750);
         setMinimumSize(new Dimension(950, 580));
         setResizable(true); // تفعيل التكبير والتصغير التلقائي للشاشة
@@ -93,16 +93,11 @@ public class ReportsWindow extends JFrame {
         header.setBackground(new Color(15, 23, 42)); // Slate 900
         header.setBorder(new EmptyBorder(15, 22, 15, 22));
 
-        JLabel lblTitle = new JLabel("التقارير والقوائم المالية");
+        JLabel lblTitle = new JLabel("التقارير");
         lblTitle.setFont(FONT_TITLE);
         lblTitle.setForeground(Color.WHITE);
 
-        JLabel lblSub = new JLabel("المبيعات والخزينة والمخزون والحسابات");
-        lblSub.setFont(FONT_PLAIN);
-        lblSub.setForeground(new Color(203, 213, 225));
-
         header.add(lblTitle, BorderLayout.NORTH);
-        header.add(lblSub, BorderLayout.SOUTH);
         add(header, BorderLayout.NORTH);
 
         // 2. التبويبات الرئيسية

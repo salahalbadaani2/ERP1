@@ -135,9 +135,9 @@ public class MainWindow extends JFrame {
             () -> new InventoryMainFrame().setVisible(true)
         ));
 
-        // 6. التقارير المالية والختامية
+        // 6. التقارير
         grid.add(createModuleCard(
-                "التقارير والقوائم المالية",
+                "التقارير",
                 "",
                 new Color(225, 29, 72), // Rose
                 () -> openReports()
