@@ -256,10 +256,6 @@ public class BankReconciliationFrame extends JFrame {
             txtBankCode.setText(dlg.getSelectedAccountCode());
             txtBankName.setText(dlg.getSelectedAccountName());
             refreshAll();
-        } else if(dlg.getSelectedAccountCode()!=null && !dlg.getSelectedAccountCode().isEmpty()){
-            txtBankCode.setText(dlg.getSelectedAccountCode());
-            txtBankName.setText(dlg.getSelectedAccountName());
-            refreshAll();
         }
     }
 
