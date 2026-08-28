@@ -167,7 +167,15 @@ public class MainWindow extends JFrame {
                 () -> openDatabaseAdmin()
         ));
 
-        // 9. تسجيل الخروج
+        // 9. الإعدادات والتهيئة
+        grid.add(createModuleCard(
+                "الإعدادات والتهيئة",
+                "",
+                new Color(15, 118, 110), // Teal dark
+                () -> new SettingsFrame().setVisible(true)
+        ));
+
+        // 10. تسجيل الخروج
         grid.add(createModuleCard(
                 "تسجيل الخروج",
                 "",
