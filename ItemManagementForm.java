@@ -223,13 +223,19 @@ public class ItemManagementForm extends JFrame {
         btnSave = new JButton("حفظ بطاقة الصنف");
         btnClose = new JButton("إغلاق");
 
-        btnSave.setFont(new Font("Tahoma", Font.BOLD, 13));
+        btnSave.setFont(new Font("Tahoma", Font.BOLD, 14));
         btnSave.setBackground(new Color(46, 125, 50));
         btnSave.setForeground(Color.WHITE);
         btnSave.setEnabled(true);
         btnSave.setOpaque(true);
+        btnSave.setContentAreaFilled(true);
         btnSave.setBorderPainted(true);
         btnSave.setFocusPainted(false);
+        btnSave.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(27, 94, 32), 2),
+            BorderFactory.createEmptyBorder(6, 18, 6, 18)
+        ));
+        btnSave.setPreferredSize(new Dimension(150, 36));
 
         btnClose.setFont(new Font("Tahoma", Font.PLAIN, 12));
 
@@ -351,9 +357,26 @@ public class ItemManagementForm extends JFrame {
             @Override public void mouseClicked(java.awt.event.MouseEvent e) {
                 AccountTreeDialog dialog = new AccountTreeDialog(ItemManagementForm.this, masterAccountList);
                 dialog.setVisible(true);
-                String selectedAcc = dialog.getSelectedAccount();
-                if (selectedAcc != null && !selectedAcc.isEmpty()) {
-                    cmbSubAccount.setSelectedItem(selectedAcc);
+                String code = dialog.getSelectedAccountCode();
+                String name = dialog.getSelectedAccountName();
+                String full = dialog.getSelectedAccount();
+                if (code != null && !code.isEmpty()) {
+                    txtSubAccountCode.setText(code);
+                    txtBarcode.setText(code);
+                    txtItemName.setText(name);
+                    boolean found = false;
+                    for (int i = 0; i < cmbSubAccount.getItemCount(); i++) {
+                        String it = cmbSubAccount.getItemAt(i).toString();
+                        if (it.startsWith(code + " -") || it.startsWith(code + " ")) { cmbSubAccount.setSelectedIndex(i); found = true; break; }
+                    }
+                    if (!found && full != null && !full.isEmpty()) {
+                        cmbSubAccount.addItem(full);
+                        cmbSubAccount.setSelectedItem(full);
+                    } else if (!found) {
+                        String item = code + " - " + name + " (حساب فرعي - مستوى 6)";
+                        cmbSubAccount.addItem(item);
+                        cmbSubAccount.setSelectedItem(item);
+                    }
                 }
             }
         });

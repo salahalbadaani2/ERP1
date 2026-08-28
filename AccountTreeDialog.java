@@ -120,7 +120,7 @@ public class AccountTreeDialog extends JFrame {
      */
     public AccountTreeDialog(Component parent, List<?> rawList) {
         this(getWindowForComponent(parent), (String) null);
-        managementMode = false;
+        managementMode = true;
         if (rawList != null && !rawList.isEmpty()) {
             parseAndMergeExternalList(rawList);
             buildTree("");
@@ -299,12 +299,17 @@ public class AccountTreeDialog extends JFrame {
                 }
             }
 
+            @Override public void mousePressed(MouseEvent e) { if (e.isPopupTrigger() && managementMode) showActions(e); }
+            @Override public void mouseReleased(MouseEvent e) { if (e.isPopupTrigger() && managementMode) showActions(e); }
+
             @Override
             public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && selectedAccount != null) {
+                    handleSelectAccount();
+                    return;
+                }
                 if (managementMode && e.getClickCount() == 1 && !e.isPopupTrigger()) {
                     showActions(e);
-                } else if (!managementMode && e.getClickCount() == 2 && selectedAccount != null) {
-                    handleSelectAccount();
                 }
             }
         });
