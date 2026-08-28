@@ -167,7 +167,15 @@ public class MainWindow extends JFrame {
                 () -> new SettingsFrame().setVisible(true)
         ));
 
-        // 10. تسجيل الخروج
+        // 10. الحسابات العامة
+        grid.add(createModuleCard(
+                "الحسابات العامة",
+                "",
+                new Color(0, 102, 153),
+                () -> new GeneralLedgerModuleFrame().setVisible(true)
+        ));
+
+        // 11. تسجيل الخروج
         grid.add(createModuleCard(
                 "تسجيل الخروج",
                 "",
