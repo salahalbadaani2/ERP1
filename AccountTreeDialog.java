@@ -23,7 +23,7 @@ import java.util.List;
  * 3. التكبير والتصغير المتجاوب
  * 4. التوافقية الشاملة مع ملف AccountsData.txt وقاعدة بيانات MySQL
  */
-public class AccountTreeDialog extends JDialog {
+public class AccountTreeDialog extends JFrame {
 
     private static final String ACCOUNTS_FILE = "AccountsData.txt";
 
@@ -131,12 +131,12 @@ public class AccountTreeDialog extends JDialog {
      * المشيد الأساسي الذي يستقبل Window المباشر
      */
     public AccountTreeDialog(Window owner, String filterPrefix) {
-        super(owner, "دليل شجرة الحسابات المركزية (Chart of Accounts)", ModalityType.APPLICATION_MODAL);
+        super("دليل شجرة الحسابات المركزية (Chart of Accounts)");
         this.filterRootCode = filterPrefix;
         this.managementMode = filterPrefix == null;
         this.accountList = new ArrayList<>();
 
-        setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setResizable(true);
         getContentPane().setLayout(new BorderLayout(8, 8));
         setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
@@ -148,6 +148,14 @@ public class AccountTreeDialog extends JDialog {
         setSize(width, height);
         setMinimumSize(new Dimension(800, 480));
         setLocationRelativeTo(owner);
+
+        // محاكاة التجميد: تعطيل النافذة الأم مؤقتاً
+        final Window parentWindow = owner;
+        if (parentWindow != null) parentWindow.setEnabled(false);
+        addWindowListener(new WindowAdapter() {
+            @Override public void windowClosing(WindowEvent e) { if (parentWindow != null) { parentWindow.setEnabled(true); parentWindow.toFront(); } }
+            @Override public void windowClosed(WindowEvent e) { if (parentWindow != null) { parentWindow.setEnabled(true); parentWindow.toFront(); } }
+        });
 
         initUI();
         setupEvents();
@@ -163,6 +171,8 @@ public class AccountTreeDialog extends JDialog {
                 getContentPane().repaint();
             }
         }.execute();
+        WindowManageBinderr.bind(this);
+        WindowManageBinderr.bind(this);
     }
 
     private static Window getWindowForComponent(Component comp) {
@@ -298,8 +308,8 @@ public class AccountTreeDialog extends JDialog {
                 }
             }
 
-            @Override public void mousePressed(MouseEvent e) { if (e.isPopupTrigger() && managementMode) showActions(e); }
-            @Override public void mouseReleased(MouseEvent e) { if (e.isPopupTrigger() && managementMode) showActions(e); }
+            @Override public void mousePressed(MouseEvent e) { if (SwingUtilities.isRightMouseButton(e) && managementMode) showActions(e); }
+            @Override public void mouseReleased(MouseEvent e) { if (SwingUtilities.isRightMouseButton(e) && managementMode) showActions(e); }
 
             @Override
             public void mouseClicked(MouseEvent e) {
