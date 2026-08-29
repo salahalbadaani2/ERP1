@@ -203,7 +203,9 @@ public class InventoryMainFrame extends JFrame {
         JPanel north=new JPanel(new BorderLayout()); north.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT); north.add(header,BorderLayout.NORTH); north.add(form,BorderLayout.CENTER);
         panel.add(north,BorderLayout.NORTH); panel.add(scroll,BorderLayout.CENTER); panel.add(actions,BorderLayout.SOUTH);
         SwingUtilities.invokeLater(()->toggleFinancialColumns(table,new int[]{4,5},cbShowFinancial.isSelected()));
-        AccountTreeBinder.attach(txtItemName, 121, txtItemCode, owner, () -> txtQty.requestFocusInWindow());
+        AccountTreeBinder.attach(txtItemName, "121", txtItemCode, owner, () -> {
+            txtQty.requestFocusInWindow();
+        });
         return panel;
     }
 
@@ -254,6 +256,9 @@ public class InventoryMainFrame extends JFrame {
         JPanel north=new JPanel(new BorderLayout()); north.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT); north.add(header,BorderLayout.NORTH); north.add(form,BorderLayout.CENTER);
         panel.add(north,BorderLayout.NORTH); panel.add(scroll,BorderLayout.CENTER); panel.add(actions,BorderLayout.SOUTH);
         SwingUtilities.invokeLater(()->toggleFinancialColumns(table,new int[]{4,5},cbShowFinancial.isSelected()));
+        AccountTreeBinder.attach(txtItemName, "121", txtItemCode, owner, () -> {
+            txtQty.requestFocusInWindow();
+        });
         return panel;
     }
 
@@ -282,7 +287,9 @@ public class InventoryMainFrame extends JFrame {
         JPanel north=new JPanel(new BorderLayout()); north.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT); north.add(header,BorderLayout.NORTH); north.add(form,BorderLayout.CENTER);
         panel.add(north,BorderLayout.NORTH); panel.add(scroll,BorderLayout.CENTER); panel.add(actions,BorderLayout.SOUTH);
         SwingUtilities.invokeLater(()->toggleFinancialColumns(table,new int[]{5,6},cbShowFinancial.isSelected()));
-        AccountTreeBinder.attach(txtItemName, 121, txtItemCode, owner, () -> txtQty.requestFocusInWindow());
+        AccountTreeBinder.attach(txtItemName, "121", txtItemCode, owner, () -> {
+            txtQty.requestFocusInWindow();
+        });
         return panel;
     }
 
