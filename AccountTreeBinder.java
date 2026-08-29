@@ -17,7 +17,6 @@ public final class AccountTreeBinder {
         txtAccountName.setEditable(false);
         txtAccountName.setBackground(new Color(245,245,245));
         txtAccountName.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        txtAccountName.setToolTipText("انقر لاختيار الحساب من الدليل");
 
         txtAccountName.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {

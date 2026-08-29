@@ -410,7 +410,7 @@ public class BankReconciliationFrame extends JFrame {
         JTextField txtAmount = new JTextField(10);
         JTextField txtNarr = new JTextField(20);
 
-        AccountTreeBinder.attach(txtCounterName, txtCounterCode, dlg, () -> txtAmount.requestFocusInWindow());
+        AccountTreeBinder.attach(txtCounterName, txtCounterCode, dlg, () -> {});
 
         gbc.gridx=0; gbc.gridy=0; dlg.add(new JLabel("نوع الحركة:"), gbc);
         gbc.gridx=1; gbc.gridwidth=2; dlg.add(cmbType, gbc);
