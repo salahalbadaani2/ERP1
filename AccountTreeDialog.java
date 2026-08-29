@@ -133,7 +133,7 @@ public class AccountTreeDialog extends JFrame {
     public AccountTreeDialog(Window owner, String filterPrefix) {
         super("دليل شجرة الحسابات المركزية (Chart of Accounts)");
         this.filterRootCode = filterPrefix;
-        this.managementMode = filterPrefix == null;
+        this.managementMode = true;
         this.accountList = new ArrayList<>();
 
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);

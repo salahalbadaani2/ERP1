@@ -174,11 +174,36 @@ public class InventoryMainFrame extends JFrame {
         JButton btnRemove=new JButton("حذف السطر المحدد"); JButton btnApprove=new JButton("اعتماد الاستلام"); btnApprove.setBackground(new Color(16,185,129)); btnApprove.setForeground(Color.WHITE); JButton btnPrint=new JButton("عرض وطباعة");
         actions.add(btnRemove); actions.add(btnApprove); actions.add(btnPrint);
         btnRemove.addActionListener(e->{int sel=table.getSelectedRow(); if(sel>=0) model.removeRow(table.convertRowIndexToModel(sel));});
-        btnApprove.addActionListener(e->{if(model.getRowCount()==0){JOptionPane.showMessageDialog(owner,"لا توجد أصناف.","تنبيه",JOptionPane.WARNING_MESSAGE);return;} int count=model.getRowCount(); double sum=0; for(int i=0;i<count;i++) sum+=((Number)model.getValueAt(i,5)).doubleValue(); JOptionPane.showMessageDialog(owner,"تم اعتماد استلام "+count+" صنف بإجمالي "+sum,"نجاح",JOptionPane.INFORMATION_MESSAGE); txtDocNo.setText(safeNext("WAREHOUSE_RECEIPT","WR-")); model.setRowCount(0);});
+        btnApprove.addActionListener(e->{
+            if(model.getRowCount()==0){JOptionPane.showMessageDialog(owner,"لا توجد أصناف.","تنبيه",JOptionPane.WARNING_MESSAGE);return;}
+            // الأثر المحاسبي - ترحيل كل سطر كقيد مزدوج
+            int successCount=0;
+            for(int i=0;i<model.getRowCount();i++){
+                String code=(String)model.getValueAt(i,0);
+                String name=(String)model.getValueAt(i,1);
+                double qty=((Number)model.getValueAt(i,3)).doubleValue();
+                double unitCost=((Number)model.getValueAt(i,4)).doubleValue();
+                double total=((Number)model.getValueAt(i,5)).doubleValue();
+                if(total<=0) total=qty*unitCost;
+                try{
+                    // استلام مخزني: مدين مخزون - دائن مصدر (210101)
+                    JournalEntry je=new JournalEntry(txtDocNo.getText()+"-"+(i+1), txtDocNo.getText(), "INVENTORY", "استلام مخزني - "+name);
+                    je.addDebitLine(code, name, "استلام مخزني", total);
+                    je.addCreditLine("210101", "مصدر الاستلام", "إثبات مصدر الاستلام", total);
+                    if(PostingEngine.postJournalEntry(je)) successCount++;
+                }catch(Exception ex){
+                    JOptionPane.showMessageDialog(owner,"السطر "+(i+1)+": "+ex.getMessage(),"خطأ",JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+            }
+            JOptionPane.showMessageDialog(owner,"تم اعتماد وترحيل استلام "+successCount+" صنف محاسبياً","نجاح",JOptionPane.INFORMATION_MESSAGE);
+            txtDocNo.setText(safeNext("WAREHOUSE_RECEIPT","WR-")); model.setRowCount(0);
+        });
         btnPrint.addActionListener(e->{StringBuilder html=new StringBuilder("<h2>الاستلام المخزني</h2><p>رقم المستند: "+txtDocNo.getText()+"</p><table border='1' cellpadding='4' cellspacing='0' style='border-collapse:collapse; width:100%'><tr>"); for(int c=0;c<model.getColumnCount();c++) if(cbShowFinancial.isSelected()||c<4) html.append("<th>").append(model.getColumnName(c)).append("</th>"); html.append("</tr>"); for(int r=0;r<model.getRowCount();r++){html.append("<tr>"); for(int c=0;c<model.getColumnCount();c++) if(cbShowFinancial.isSelected()||c<4) html.append("<td>").append(model.getValueAt(r,c)).append("</td>"); html.append("</tr>");} html.append("</table><p>التوقيع: ____________________</p>"); new DocumentPreviewDialog(owner,"الاستلام المخزني",html.toString()).setVisible(true);});
         JPanel north=new JPanel(new BorderLayout()); north.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT); north.add(header,BorderLayout.NORTH); north.add(form,BorderLayout.CENTER);
         panel.add(north,BorderLayout.NORTH); panel.add(scroll,BorderLayout.CENTER); panel.add(actions,BorderLayout.SOUTH);
         SwingUtilities.invokeLater(()->toggleFinancialColumns(table,new int[]{4,5},cbShowFinancial.isSelected()));
+        AccountTreeBinder.attach(txtItemName, 121, txtItemCode, owner, () -> txtQty.requestFocusInWindow());
         return panel;
     }
 
@@ -202,7 +227,29 @@ public class InventoryMainFrame extends JFrame {
         JScrollPane scroll=new JScrollPane(table); scroll.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         JPanel actions=new JPanel(new FlowLayout(FlowLayout.LEFT)); actions.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT); JButton btnRemove=new JButton("حذف السطر المحدد"); JButton btnApprove=new JButton("اعتماد الصرف"); btnApprove.setBackground(new Color(220,38,38)); btnApprove.setForeground(Color.WHITE); JButton btnPrint=new JButton("عرض وطباعة"); actions.add(btnRemove); actions.add(btnApprove); actions.add(btnPrint);
         btnRemove.addActionListener(e->{int sel=table.getSelectedRow(); if(sel>=0) model.removeRow(table.convertRowIndexToModel(sel));});
-        btnApprove.addActionListener(e->{if(model.getRowCount()==0){JOptionPane.showMessageDialog(owner,"لا توجد أصناف.","تنبيه",JOptionPane.WARNING_MESSAGE);return;} int count=model.getRowCount(); double sum=0; for(int i=0;i<count;i++) sum+=((Number)model.getValueAt(i,5)).doubleValue(); JOptionPane.showMessageDialog(owner,"تم اعتماد صرف "+count+" صنف بإجمالي "+sum,"نجاح",JOptionPane.INFORMATION_MESSAGE); txtDocNo.setText(safeNext("WAREHOUSE_ISSUE","WI-")); model.setRowCount(0);});
+        btnApprove.addActionListener(e->{
+            if(model.getRowCount()==0){JOptionPane.showMessageDialog(owner,"لا توجد أصناف.","تنبيه",JOptionPane.WARNING_MESSAGE);return;}
+            int successCount=0;
+            for(int i=0;i<model.getRowCount();i++){
+                String code=(String)model.getValueAt(i,0);
+                String name=(String)model.getValueAt(i,1);
+                double qty=((Number)model.getValueAt(i,3)).doubleValue();
+                double unitCost=((Number)model.getValueAt(i,4)).doubleValue();
+                double total=((Number)model.getValueAt(i,5)).doubleValue();
+                if(total<=0) total=qty*unitCost;
+                try{
+                    JournalEntry je=new JournalEntry(txtDocNo.getText()+"-"+(i+1), txtDocNo.getText(), "INVENTORY", "صرف مخزني - "+name);
+                    je.addDebitLine("1210201", "جهة الصرف", "تحميل الصرف المخزني", total);
+                    je.addCreditLine(code, name, "صرف مخزني", total);
+                    if(PostingEngine.postJournalEntry(je)) successCount++;
+                }catch(Exception ex){
+                    JOptionPane.showMessageDialog(owner,"السطر "+(i+1)+": "+ex.getMessage(),"خطأ",JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+            }
+            JOptionPane.showMessageDialog(owner,"تم اعتماد وترحيل صرف "+successCount+" صنف محاسبياً","نجاح",JOptionPane.INFORMATION_MESSAGE);
+            txtDocNo.setText(safeNext("WAREHOUSE_ISSUE","WI-")); model.setRowCount(0);
+        });
         btnPrint.addActionListener(e->{StringBuilder html=new StringBuilder("<h2>الصرف المخزني</h2><p>رقم المستند: "+txtDocNo.getText()+"</p><table border='1' cellpadding='4' cellspacing='0' style='border-collapse:collapse; width:100%'><tr>"); for(int c=0;c<model.getColumnCount();c++) if(cbShowFinancial.isSelected()||c<4) html.append("<th>").append(model.getColumnName(c)).append("</th>"); html.append("</tr>"); for(int r=0;r<model.getRowCount();r++){html.append("<tr>"); for(int c=0;c<model.getColumnCount();c++) if(cbShowFinancial.isSelected()||c<4) html.append("<td>").append(model.getValueAt(r,c)).append("</td>"); html.append("</tr>");} html.append("</table><p>التوقيع: ____________________</p>"); new DocumentPreviewDialog(owner,"الصرف المخزني",html.toString()).setVisible(true);});
         JPanel north=new JPanel(new BorderLayout()); north.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT); north.add(header,BorderLayout.NORTH); north.add(form,BorderLayout.CENTER);
         panel.add(north,BorderLayout.NORTH); panel.add(scroll,BorderLayout.CENTER); panel.add(actions,BorderLayout.SOUTH);
@@ -235,6 +282,7 @@ public class InventoryMainFrame extends JFrame {
         JPanel north=new JPanel(new BorderLayout()); north.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT); north.add(header,BorderLayout.NORTH); north.add(form,BorderLayout.CENTER);
         panel.add(north,BorderLayout.NORTH); panel.add(scroll,BorderLayout.CENTER); panel.add(actions,BorderLayout.SOUTH);
         SwingUtilities.invokeLater(()->toggleFinancialColumns(table,new int[]{5,6},cbShowFinancial.isSelected()));
+        AccountTreeBinder.attach(txtItemName, 121, txtItemCode, owner, () -> txtQty.requestFocusInWindow());
         return panel;
     }
 
