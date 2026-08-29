@@ -66,8 +66,7 @@ public class BankReconciliationFrame extends JFrame {
         txtBankCode.setBackground(Color.WHITE);
         txtBankName.setEditable(false);
         txtBankName.setBackground(new Color(245,245,245));
-        txtBankCode.setToolTipText("اضغط F3 لاختيار حساب البنك");
-        txtBankName.setToolTipText("اضغط F3 لاختيار حساب البنك");
+
 
         txtAsOfDate.addActionListener(e -> refreshAll());
         txtBankBalance.addActionListener(e -> updateFooter());
@@ -77,13 +76,7 @@ public class BankReconciliationFrame extends JFrame {
             public void changedUpdate(javax.swing.event.DocumentEvent e){updateFooter();}
         });
 
-        KeyAdapter f3Bank = new KeyAdapter(){
-            @Override public void keyPressed(KeyEvent e){ if(e.getKeyCode()==KeyEvent.VK_F3) openBankTree(); }
-        };
-        txtBankCode.addKeyListener(f3Bank);
-        txtBankName.addKeyListener(f3Bank);
-        txtBankCode.addMouseListener(new MouseAdapter(){ @Override public void mouseClicked(MouseEvent e){ if(e.getClickCount()==2) openBankTree(); }});
-        txtBankName.addMouseListener(new MouseAdapter(){ @Override public void mouseClicked(MouseEvent e){ if(e.getClickCount()==2) openBankTree(); }});
+        AccountTreeBinder.attach(txtBankName, txtBankCode, this, () -> refreshAll());
 
         ensureReconciliationTable();
         updateFooter();
@@ -102,17 +95,13 @@ public class BankReconciliationFrame extends JFrame {
         gbc.anchor = GridBagConstraints.EAST;
 
         gbc.gridx=0; gbc.gridy=0; gbc.weightx=0;
-        header.add(new JLabel("حساب البنك (F3):"), gbc);
+        header.add(new JLabel("حساب البنك:"), gbc);
         gbc.gridx=1; gbc.weightx=0.3;
         txtBankCode.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         header.add(txtBankCode, gbc);
         gbc.gridx=2; gbc.weightx=0.5;
         txtBankName.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         header.add(txtBankName, gbc);
-        JButton btnChoose = new JButton("اختيار...");
-        btnChoose.addActionListener(e->openBankTree());
-        gbc.gridx=3; gbc.weightx=0;
-        header.add(btnChoose, gbc);
 
         gbc.gridx=0; gbc.gridy=1; gbc.weightx=0;
         header.add(new JLabel("تاريخ القطع (YYYY-MM-DD):"), gbc);
@@ -204,13 +193,17 @@ public class BankReconciliationFrame extends JFrame {
         JPanel btnP = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
         btnP.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         JButton btnQuick = new JButton("إضافة قيد تسوية سريع");
-        btnQuick.setBackground(new Color(37,99,235));
+        btnQuick.setBackground(new Color(37, 99, 235));
         btnQuick.setForeground(Color.WHITE);
+        btnQuick.setContentAreaFilled(true);
+        btnQuick.setOpaque(true);
         btnQuick.setFont(new Font("Tahoma", Font.BOLD, 12));
         btnQuick.addActionListener(e->openQuickAdjustmentDialog());
         btnFinalApprove = new JButton("اعتماد التسوية النهائية");
-        btnFinalApprove.setBackground(new Color(16,185,129));
+        btnFinalApprove.setBackground(new Color(16, 185, 129));
         btnFinalApprove.setForeground(Color.WHITE);
+        btnFinalApprove.setContentAreaFilled(true);
+        btnFinalApprove.setOpaque(true);
         btnFinalApprove.setFont(new Font("Tahoma", Font.BOLD, 13));
         btnFinalApprove.setEnabled(false);
         btnFinalApprove.addActionListener(e->reconcileSelected());
@@ -250,13 +243,19 @@ public class BankReconciliationFrame extends JFrame {
     }
 
     private void openBankTree(){
-        AccountTreeDialog dlg = new AccountTreeDialog(this, "112");
+        AccountTreeDialog dlg = new AccountTreeDialog(this);
+        dlg.setAlwaysOnTop(true);
+        dlg.addWindowListener(new java.awt.event.WindowAdapter(){
+            @Override public void windowClosed(java.awt.event.WindowEvent e){
+                if(dlg.isAccountSelected()){
+                    txtBankCode.setText(dlg.getSelectedAccountCode());
+                    txtBankName.setText(dlg.getSelectedAccountName());
+                    refreshAll();
+                }
+            }
+        });
         dlg.setVisible(true);
-        if(dlg.isAccountSelected()){
-            txtBankCode.setText(dlg.getSelectedAccountCode());
-            txtBankName.setText(dlg.getSelectedAccountName());
-            refreshAll();
-        }
+        dlg.toFront();
     }
 
     private void ensureReconciliationTable(){
@@ -283,10 +282,41 @@ public class BankReconciliationFrame extends JFrame {
         }
         LocalDate asOf;
         try{ asOf = LocalDate.parse(dateStr, DateTimeFormatter.ISO_LOCAL_DATE); }catch(DateTimeParseException ex){ JOptionPane.showMessageDialog(this,"تاريخ القطع غير صالح YYYY-MM-DD","خطأ",JOptionPane.ERROR_MESSAGE); return; }
-        double book = fetchBookBalance(bank, asOf);
-        txtBookBalance.setText(String.format("%,.2f", book));
-        loadUnreconciled(bank, asOf);
+        txtBookBalance.setText("جاري التحميل...");
+        model.setRowCount(0);
         updateFooter();
+        new SwingWorker<Void, Void>(){
+            double book;
+            java.util.List<Object[]> rows = new java.util.ArrayList<>();
+            @Override protected Void doInBackground() throws Exception {
+                book = fetchBookBalance(bank, asOf);
+                String sql = "SELECT je.entry_date, je.entry_number, je.narration, jl.debit_amount, jl.credit_amount, je.source_module FROM journal_entries je JOIN journal_entry_lines jl ON je.entry_id=jl.entry_id WHERE jl.account_code=? AND je.entry_date <= ? AND je.entry_number NOT IN (SELECT journal_entry_number FROM bank_reconciliation WHERE bank_account=? AND reconciled=1) ORDER BY je.entry_date, je.entry_number";
+                try (Connection conn=DatabaseManager.getConnection(); PreparedStatement ps=conn.prepareStatement(sql)){
+                    ps.setString(1,bank);
+                    ps.setString(2,asOf.toString());
+                    ps.setString(3,bank);
+                    try(ResultSet rs=ps.executeQuery()){
+                        while(rs.next()){
+                            String date = rs.getString(1);
+                            String doc = rs.getString(2);
+                            String narr = rs.getString(3);
+                            double debit = rs.getDouble(4);
+                            double credit = rs.getDouble(5);
+                            String dep = debit>0? String.format("%,.2f",debit):"0.00";
+                            String wit = credit>0? String.format("%,.2f",credit):"0.00";
+                            rows.add(new Object[]{Boolean.FALSE, date, doc, narr, dep, wit, debit>0? "إيداع":"سحب"});
+                        }
+                    }
+                }catch(Exception ignored){}
+                return null;
+            }
+            @Override protected void done(){
+                txtBookBalance.setText(String.format("%,.2f", book));
+                model.setRowCount(0);
+                for(Object[] r: rows) model.addRow(r);
+                updateFooter();
+            }
+        }.execute();
     }
 
     private double fetchBookBalance(String bankCode, LocalDate asOf){
@@ -324,13 +354,9 @@ public class BankReconciliationFrame extends JFrame {
             }
         }catch(Exception ex){
             if(model.getRowCount()==0){
-                model.addRow(new Object[]{Boolean.FALSE, asOf.toString(), "JE-DEMO-1", "إيداع بنكي غير مسوى", "1,500.00", "0.00", "إيداع"});
-                model.addRow(new Object[]{Boolean.FALSE, asOf.toString(), "JE-DEMO-2", "سحب شيك معلق", "0.00", "800.00", "سحب"});
             }
         }
         if(model.getRowCount()==0){
-            model.addRow(new Object[]{Boolean.FALSE, asOf.toString(), "JE-DEMO-1", "إيداع بنكي غير مسوى", "1,500.00", "0.00", "إيداع"});
-            model.addRow(new Object[]{Boolean.FALSE, asOf.toString(), "JE-DEMO-2", "سحب شيك معلق", "0.00", "800.00", "سحب"});
         }
     }
 
@@ -384,24 +410,13 @@ public class BankReconciliationFrame extends JFrame {
         JTextField txtAmount = new JTextField(10);
         JTextField txtNarr = new JTextField(20);
 
-        JButton btnPick = new JButton("F3");
-        btnPick.addActionListener(ev->{
-            AccountTreeDialog ad = new AccountTreeDialog(dlg);
-            ad.setVisible(true);
-            if(ad.isAccountSelected()){
-                txtCounterCode.setText(ad.getSelectedAccountCode());
-                txtCounterName.setText(ad.getSelectedAccountName());
-            }
-        });
-        txtCounterCode.addKeyListener(new KeyAdapter(){ public void keyPressed(KeyEvent e){ if(e.getKeyCode()==KeyEvent.VK_F3) btnPick.doClick(); }});
-        txtCounterCode.addMouseListener(new MouseAdapter(){ public void mouseClicked(MouseEvent e){ if(e.getClickCount()==2) btnPick.doClick(); }});
+        AccountTreeBinder.attach(txtCounterName, txtCounterCode, dlg, () -> txtAmount.requestFocusInWindow());
 
         gbc.gridx=0; gbc.gridy=0; dlg.add(new JLabel("نوع الحركة:"), gbc);
         gbc.gridx=1; gbc.gridwidth=2; dlg.add(cmbType, gbc);
         gbc.gridwidth=1;
-        gbc.gridx=0; gbc.gridy=1; dlg.add(new JLabel("الحساب المقابل (F3):"), gbc);
-        gbc.gridx=1; dlg.add(txtCounterCode, gbc);
-        gbc.gridx=2; dlg.add(btnPick, gbc);
+        gbc.gridx=0; gbc.gridy=1; dlg.add(new JLabel("الحساب المقابل:"), gbc);
+        gbc.gridx=1; gbc.gridwidth=2; dlg.add(txtCounterCode, gbc);
         gbc.gridx=0; gbc.gridy=2; dlg.add(new JLabel("اسم الحساب:"), gbc);
         gbc.gridx=1; gbc.gridwidth=2; gbc.fill=GridBagConstraints.HORIZONTAL; dlg.add(txtCounterName, gbc); gbc.gridwidth=1;
         txtCounterCode.getDocument().addDocumentListener(new javax.swing.event.DocumentListener(){
@@ -592,3 +607,4 @@ public class BankReconciliationFrame extends JFrame {
 
     public static void main(String[] args){ SwingUtilities.invokeLater(()->new BankReconciliationFrame().setVisible(true)); }
 }
+

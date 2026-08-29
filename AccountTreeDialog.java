@@ -158,12 +158,19 @@ public class AccountTreeDialog extends JFrame {
         });
 
         initUI();
-        loadAccountsData();
-        buildTree("");
         setupEvents();
-
-        getContentPane().revalidate();
-        getContentPane().repaint();
+        // فصل استعلامات قاعدة البيانات عن خيط الواجهة
+        new SwingWorker<Void, Void>() {
+            @Override protected Void doInBackground() throws Exception {
+                loadAccountsData();
+                return null;
+            }
+            @Override protected void done() {
+                buildTree("");
+                getContentPane().revalidate();
+                getContentPane().repaint();
+            }
+        }.execute();
     }
 
     private static Window getWindowForComponent(Component comp) {
@@ -308,9 +315,7 @@ public class AccountTreeDialog extends JFrame {
                     handleSelectAccount();
                     return;
                 }
-                if (managementMode && e.getClickCount() == 1 && !e.isPopupTrigger()) {
-                    showActions(e);
-                }
+                
             }
         });
 
