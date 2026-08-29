@@ -8,6 +8,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
 public final class AccountTreeBinder {
+    private static volatile boolean isDialogOpen = false;
     private AccountTreeBinder() {}
 
     public static void attach(JTextField txtAccountName, JTextField txtAccountCode, Window parentWindow, Runnable onSelectCallback) {
@@ -20,7 +21,7 @@ public final class AccountTreeBinder {
 
         txtAccountName.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 1 && SwingUtilities.isLeftMouseButton(e)) {
+                if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
                     openDialog(txtAccountName, txtAccountCode, parentWindow, onSelectCallback);
                 }
             }
@@ -35,24 +36,33 @@ public final class AccountTreeBinder {
     }
 
     private static void openDialog(JTextField txtAccountName, JTextField txtAccountCode, Window parentWindow, Runnable onSelectCallback) {
-        AccountTreeDialog dlg = new AccountTreeDialog(parentWindow);
-        dlg.setAlwaysOnTop(true);
-        dlg.addWindowListener(new WindowAdapter() {
-            @Override public void windowClosed(WindowEvent e) {
-                if (dlg.isAccountSelected()) {
-                    txtAccountCode.setText(dlg.getSelectedAccountCode());
-                    txtAccountName.setText(dlg.getSelectedAccountName());
-                    if (onSelectCallback != null) onSelectCallback.run();
+        if (isDialogOpen) return;
+        isDialogOpen = true;
+        SwingUtilities.invokeLater(() -> {
+            AccountTreeDialog dlg = new AccountTreeDialog(parentWindow);
+            dlg.setAlwaysOnTop(true);
+            dlg.addWindowListener(new WindowAdapter() {
+                @Override public void windowClosed(WindowEvent e) {
+                    isDialogOpen = false;
+                    if (dlg.isAccountSelected()) {
+                        txtAccountCode.setText(dlg.getSelectedAccountCode());
+                        txtAccountName.setText(dlg.getSelectedAccountName());
+                        if (onSelectCallback != null) onSelectCallback.run();
+                    }
+                    if (parentWindow != null) {
+                        SwingUtilities.invokeLater(() -> {
+                            parentWindow.toFront();
+                            parentWindow.requestFocus();
+                        });
+                    }
                 }
-                // إعادة التركيز للنافذة الأم بعد الإغلاق
-                if (parentWindow != null) {
-                    parentWindow.toFront();
-                    parentWindow.requestFocus();
+                @Override public void windowClosing(WindowEvent e) {
+                    isDialogOpen = false;
                 }
-            }
+            });
+            dlg.setVisible(true);
+            dlg.toFront();
+            dlg.requestFocus();
         });
-        dlg.setVisible(true);
-        dlg.toFront();
-        dlg.requestFocus();
     }
 }

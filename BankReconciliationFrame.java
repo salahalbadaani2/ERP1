@@ -78,8 +78,20 @@ public class BankReconciliationFrame extends JFrame {
 
         AccountTreeBinder.attach(txtBankName, txtBankCode, this, () -> refreshAll());
 
-        ensureReconciliationTable();
-        updateFooter();
+        // نقل عمليات الداتا بيز خارج خيط الواجهة
+        new SwingWorker<Void, Void>(){
+            @Override protected Void doInBackground() throws Exception {
+                ensureReconciliationTable();
+                return null;
+            }
+            @Override protected void done(){
+                SwingUtilities.invokeLater(() -> {
+                    revalidate();
+                    repaint();
+                    updateFooter();
+                });
+            }
+        }.execute();
     }
 
     private JPanel createHeaderPanel() {
