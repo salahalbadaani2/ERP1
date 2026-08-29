@@ -210,12 +210,14 @@ public class BankReconciliationFrame extends JFrame {
         btnQuick.setContentAreaFilled(true);
         btnQuick.setOpaque(true);
         btnQuick.setFont(new Font("Tahoma", Font.BOLD, 12));
+        btnQuick.setPreferredSize(new Dimension(180, 36));
         btnQuick.addActionListener(e->openQuickAdjustmentDialog());
         btnFinalApprove = new JButton("اعتماد التسوية النهائية");
         btnFinalApprove.setBackground(new Color(16, 185, 129));
         btnFinalApprove.setForeground(Color.WHITE);
         btnFinalApprove.setContentAreaFilled(true);
         btnFinalApprove.setOpaque(true);
+        btnFinalApprove.setPreferredSize(new Dimension(180, 36));
         btnFinalApprove.setFont(new Font("Tahoma", Font.BOLD, 13));
         btnFinalApprove.setEnabled(false);
         btnFinalApprove.addActionListener(e->reconcileSelected());
@@ -458,52 +460,61 @@ public class BankReconciliationFrame extends JFrame {
             String counterName = txtCounterName.getText().trim();
             String amtStr = txtAmount.getText().trim();
             String narr = txtNarr.getText().trim();
-            if(counterCode.isEmpty()){ JOptionPane.showMessageDialog(dlg,"اختر الحساب المقابل عبر F3","تنبيه",JOptionPane.WARNING_MESSAGE); return; }
+            if(counterCode.isEmpty()){ JOptionPane.showMessageDialog(dlg,"اختر الحساب المقابل","تنبيه",JOptionPane.WARNING_MESSAGE); return; }
             double amt;
             try{ amt = Double.parseDouble(amtStr.replace(",","")); if(amt<=0) throw new NumberFormatException(); }catch(Exception ex){ JOptionPane.showMessageDialog(dlg,"المبلغ غير صالح","خطأ",JOptionPane.ERROR_MESSAGE); return; }
             if(narr.isEmpty()) narr = type + " تسوية بنكية";
-            // إنشاء قيد يومية
-            String entryNo;
-            try{ entryNo = DocumentNumberService.next("JOURNAL_ENTRY", "JE-"); }catch(Exception ex){ entryNo = "JE-ADJ-" + System.currentTimeMillis(); }
-            JournalEntry je = new JournalEntry(entryNo, entryNo, "MANUAL", narr + " - تسوية بنكية " + bankCode);
-            try{
-                if("مصروف بنكي".equals(type)){
-                    je.addDebitLine(counterCode, counterName.isEmpty()?counterCode:counterName, narr, amt);
-                    je.addCreditLine(bankCode, bankName.isEmpty()?bankCode:bankName, narr, amt);
-                } else if("إيراد بنكي".equals(type)){
-                    je.addDebitLine(bankCode, bankName.isEmpty()?bankCode:bankName, narr, amt);
-                    je.addCreditLine(counterCode, counterName.isEmpty()?counterCode:counterName, narr, amt);
-                } else { // حوالة
-                    je.addDebitLine(bankCode, bankName.isEmpty()?bankCode:bankName, narr, amt);
-                    je.addCreditLine(counterCode, counterName.isEmpty()?counterCode:counterName, narr, amt);
+            final String finalNarr = narr;
+            final double finalAmt = amt;
+            final String finalType = type;
+            btnSave.setEnabled(false);
+            new SwingWorker<Boolean, Void>(){
+                String entryNo;
+                @Override protected Boolean doInBackground() throws Exception {
+                    entryNo = DocumentNumberService.next("JOURNAL_ENTRY", "JE-");
+                    JournalEntry je = new JournalEntry(entryNo, entryNo, "MANUAL", finalNarr + " - تسوية بنكية " + bankCode);
+                    if("مصروف بنكي".equals(finalType)){
+                        je.addDebitLine(counterCode, counterName.isEmpty()?counterCode:counterName, finalNarr, finalAmt);
+                        je.addCreditLine(bankCode, bankName.isEmpty()?bankCode:bankName, finalNarr, finalAmt);
+                    } else if("إيراد بنكي".equals(finalType)){
+                        je.addDebitLine(bankCode, bankName.isEmpty()?bankCode:bankName, finalNarr, finalAmt);
+                        je.addCreditLine(counterCode, counterName.isEmpty()?counterCode:counterName, finalNarr, finalAmt);
+                    } else {
+                        je.addDebitLine(bankCode, bankName.isEmpty()?bankCode:bankName, finalNarr, finalAmt);
+                        je.addCreditLine(counterCode, counterName.isEmpty()?counterCode:counterName, finalNarr, finalAmt);
+                    }
+                    return PostingEngine.postJournalEntry(je);
                 }
-            }catch(Exception ex){ JOptionPane.showMessageDialog(dlg, ex.getMessage(),"خطأ",JOptionPane.ERROR_MESSAGE); return; }
-            boolean ok = PostingEngine.postJournalEntry(je);
-            if(!ok){ JOptionPane.showMessageDialog(dlg,"فشل ترحيل القيد","خطأ",JOptionPane.ERROR_MESSAGE); return; }
-            dlg.dispose();
-            // إعادة تنشيط الجدول وإدراج السطر الجديد محدداً
-            refreshAll();
-            // ابحث عن القيد الجديد وفعّل اختياره
-            for(int i=0;i<model.getRowCount();i++){
-                if(entryNo.equals(model.getValueAt(i,2))){
-                    model.setValueAt(Boolean.TRUE, i, 0);
-                    break;
+                @Override protected void done(){
+                    try{
+                        boolean ok = get();
+                        if(!ok){ JOptionPane.showMessageDialog(dlg,"فشل ترحيل القيد","خطأ",JOptionPane.ERROR_MESSAGE); btnSave.setEnabled(true); return; }
+                        dlg.dispose();
+                        SwingUtilities.invokeLater(() -> {
+                            refreshAll();
+                            // سيتم إدراج السطر الجديد في refreshAll، ننتظر قليلاً ثم نحدده
+                            javax.swing.Timer t = new javax.swing.Timer(800, e->{
+                                boolean found=false;
+                                for(int i=0;i<model.getRowCount();i++) if(entryNo.equals(model.getValueAt(i,2))){ model.setValueAt(Boolean.TRUE, i, 0); found=true; break; }
+                                if(!found){
+                                    String dep = "إيراد بنكي".equals(finalType) || "حوالة".equals(finalType) ? String.format("%,.2f",finalAmt) : "0.00";
+                                    String wit = "مصروف بنكي".equals(finalType) ? String.format("%,.2f",finalAmt) : "0.00";
+                                    model.addRow(new Object[]{Boolean.TRUE, LocalDate.now().toString(), entryNo, finalNarr, dep, wit, finalType});
+                                }
+                                updateFooter();
+                                revalidate();
+                                repaint();
+                                JOptionPane.showMessageDialog(BankReconciliationFrame.this,"تم إنشاء قيد التسوية "+entryNo+" وترحيله بنجاح","نجاح",JOptionPane.INFORMATION_MESSAGE);
+                            });
+                            t.setRepeats(false);
+                            t.start();
+                        });
+                    }catch(Exception ex){
+                        JOptionPane.showMessageDialog(dlg, ex.getMessage(),"خطأ",JOptionPane.ERROR_MESSAGE);
+                        btnSave.setEnabled(true);
+                    }
                 }
-            }
-            // إذا لم يوجد (لأنه مسوى مسبقاً)، أضفه يدوياً محدداً
-            boolean found=false;
-            for(int i=0;i<model.getRowCount();i++) if(entryNo.equals(model.getValueAt(i,2))) found=true;
-            if(!found){
-                String dep = "إيراد بنكي".equals(type) || "حوالة".equals(type) ? String.format("%,.2f",amt) : "0.00";
-                String wit = "مصروف بنكي".equals(type) ? String.format("%,.2f",amt) : "0.00";
-                String kind = type;
-                model.addRow(new Object[]{Boolean.TRUE, LocalDate.now().toString(), entryNo, narr, dep, wit, kind});
-            } else {
-                // تأكد من تحديده
-                for(int i=0;i<model.getRowCount();i++) if(entryNo.equals(model.getValueAt(i,2))) model.setValueAt(Boolean.TRUE,i,0);
-            }
-            updateFooter();
-            JOptionPane.showMessageDialog(BankReconciliationFrame.this,"تم إنشاء قيد التسوية "+entryNo+" وترحيله بنجاح","نجاح",JOptionPane.INFORMATION_MESSAGE);
+            }.execute();
         });
 
         dlg.setVisible(true);
