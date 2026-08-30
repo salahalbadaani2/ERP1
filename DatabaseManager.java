@@ -73,6 +73,17 @@ public class DatabaseManager {
             // 2. تعديل ترميز قاعدة البيانات القائمة لدعم النصوص العربية بالكامل
             stmt.executeUpdate("ALTER DATABASE erp_factory_db CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci");
 
+            // بطاقة الأصناف والمخزون: تعتمد عليها شاشات الأصناف والمخازن وحركات البيع.
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS inventory_items ("
+                    + "item_code VARCHAR(50) PRIMARY KEY, item_name VARCHAR(255) NOT NULL, "
+                    + "category VARCHAR(100) DEFAULT 'منتجات تامة', unit VARCHAR(50) NOT NULL DEFAULT 'وحدة', "
+                    + "default_sale_price DECIMAL(18,4) NOT NULL DEFAULT 0, unit_cost DECIMAL(18,4) NOT NULL DEFAULT 0, "
+                    + "current_stock DECIMAL(18,4) NOT NULL DEFAULT 0, inventory_account VARCHAR(20) DEFAULT '1210301', "
+                    + "sales_revenue_account VARCHAR(20) DEFAULT '410101', cogs_account VARCHAR(20) DEFAULT '510101', "
+                    + "conversion_factor DECIMAL(18,4) NOT NULL DEFAULT 1, min_stock_level DECIMAL(18,4) NOT NULL DEFAULT 0, "
+                    + "expiry_date DATE NULL, batch_no VARCHAR(50) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                    + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
             // 1. جدول استلام المواد الخام (GRN)
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS goods_receipt_notes (" +
                     "id INT AUTO_INCREMENT PRIMARY KEY, " +

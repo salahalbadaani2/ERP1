@@ -119,6 +119,14 @@ public class ItemManagementForm extends JFrame {
         btnTree.setFont(new Font("Tahoma", Font.BOLD, 11));
         btnTree.setBackground(new Color(238, 238, 238));
 
+        addLabel(card, "الحساب الفرعي:", gbc, 0, 0);
+        addComp(card, txtSubAccountCode, gbc, 1, 0);
+        gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 0.0;
+        card.add(btnTree, gbc);
+        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 3; gbc.weightx = 1.0;
+        card.add(cmbSubAccount, gbc);
+        gbc.gridwidth = 1;
+
         return card;
     }
 
@@ -317,14 +325,7 @@ public class ItemManagementForm extends JFrame {
      */
     private void setupEvents() {
         // استدعاء موديول شجرة الحسابات المركزية الموحدة القياسية (AccountTreeDialog)
-        btnTree.addActionListener(e -> {
-            AccountTreeDialog dialog = new AccountTreeDialog(this, masterAccountList);
-            dialog.setVisible(true);
-            String selectedAcc = dialog.getSelectedAccount();
-            if (selectedAcc != null && !selectedAcc.isEmpty()) {
-                cmbSubAccount.setSelectedItem(selectedAcc);
-            }
-        });
+        btnTree.addActionListener(e -> chooseInventoryAccount());
 
         cmbSubAccount.addActionListener(e -> {
             Object selected = cmbSubAccount.getSelectedItem();
@@ -347,41 +348,8 @@ public class ItemManagementForm extends JFrame {
             }
         });
 
-        txtItemName.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        txtItemName.setToolTipText("انقر لفتح دليل الحسابات - الشجرة الكاملة");
+        txtItemName.setToolTipText("يُملأ تلقائياً من الحساب المختار، ويمكن تعديله لاسم الصنف التجاري.");
         txtItemName.setEditable(true);
-        txtItemName.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override public void mouseClicked(java.awt.event.MouseEvent e) {
-                AccountTreeDialog dialog = new AccountTreeDialog(ItemManagementForm.this, masterAccountList);
-                dialog.setVisible(true);
-                String code = dialog.getSelectedAccountCode();
-                String name = dialog.getSelectedAccountName();
-                String full = dialog.getSelectedAccount();
-                if (code != null && !code.isEmpty()) {
-                    txtSubAccountCode.setText(code);
-                    txtBarcode.setText(code);
-                    txtItemName.setText(name);
-                    boolean found = false;
-                    for (int i = 0; i < cmbSubAccount.getItemCount(); i++) {
-                        String it = cmbSubAccount.getItemAt(i).toString();
-                        if (it.startsWith(code + " -") || it.startsWith(code + " ")) { cmbSubAccount.setSelectedIndex(i); found = true; break; }
-                    }
-                    if (!found && full != null && !full.isEmpty()) {
-                        cmbSubAccount.addItem(full);
-                        cmbSubAccount.setSelectedItem(full);
-                    } else if (!found) {
-                        String item = code + " - " + name + " (حساب فرعي - مستوى 6)";
-                        cmbSubAccount.addItem(item);
-                        cmbSubAccount.setSelectedItem(item);
-                    }
-                }
-            }
-        });
-        txtItemName.addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override public void focusGained(java.awt.event.FocusEvent e) {
-                txtItemName.selectAll();
-            }
-        });
 
         cmbUom.addActionListener(e -> {
             if ("+ إضافة وحدة جديدة...".equals(cmbUom.getSelectedItem())) {
@@ -397,6 +365,36 @@ public class ItemManagementForm extends JFrame {
 
         btnSave.addActionListener(e -> handleSave());
         btnClose.addActionListener(e -> dispose());
+    }
+
+    /** ينسخ اختيار الحساب الفرعي من الشجرة إلى كود واسم الصنف. */
+    private void chooseInventoryAccount() {
+        AccountTreeDialog dialog = new AccountTreeDialog(this);
+        dialog.setVisible(true);
+        if (!dialog.isAccountSelected()) return;
+
+        String code = dialog.getSelectedAccountCode();
+        String name = dialog.getSelectedAccountName();
+        if (code.isEmpty() || name.isEmpty()) return;
+
+        txtSubAccountCode.setText(code);
+        txtBarcode.setText(code);
+        txtItemName.setText(name);
+
+        String display = dialog.getSelectedAccountResult();
+        boolean found = false;
+        for (int i = 0; i < cmbSubAccount.getItemCount(); i++) {
+            String option = cmbSubAccount.getItemAt(i);
+            if (option != null && option.startsWith(code + " -")) {
+                cmbSubAccount.setSelectedIndex(i);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            cmbSubAccount.addItem(display);
+            cmbSubAccount.setSelectedItem(display);
+        }
     }
 
     /**
