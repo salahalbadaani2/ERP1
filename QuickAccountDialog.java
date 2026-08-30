@@ -5,6 +5,9 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.List;
 import java.util.Locale;
 
@@ -248,37 +251,42 @@ public class QuickAccountDialog extends JDialog {
             return;
         }
 
-        // فحص الرقابة والأمان: منع تكرار رقم الحساب أو اسمه في شجرة الحسابات
-        File fileCheck = new File("AccountsData.txt");
-        if (fileCheck.exists()) {
-            try (BufferedReader reader = new BufferedReader(new FileReader(fileCheck))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    String trimmed = line.trim();
-                    if (!trimmed.isEmpty() && trimmed.contains(" - ")) {
-                        String existingCode = trimmed.split(" - ")[0].trim();
-                        String existingName = trimmed.split(" - ")[1].replaceAll("\\(حساب.*\\)", "").trim();
-
-                        if (existingCode.equalsIgnoreCase(code)) {
-                            JOptionPane.showMessageDialog(this, "حظر أمني: رقم الحساب (" + code + ") موجود مسبقاً في دليل الحسابات.", "رفض الإضافة", JOptionPane.ERROR_MESSAGE);
-                            return;
-                        }
-
-                        if (existingName.equalsIgnoreCase(name)) {
-                            JOptionPane.showMessageDialog(this, "حظر أمني: اسم الحساب (\"" + name + "\") موجود مسبقاً في الشجرة لمنع تكرار الحسابات.", "رفض الإضافة", JOptionPane.ERROR_MESSAGE);
-                            return;
-                        }
+        // فحص الرقابة والأمان: منع تكرار رقم الحساب أو اسمه عبر قاعدة البيانات حصراً
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT account_code, account_name FROM chart_of_accounts WHERE account_code=? OR account_name=? LIMIT 1")) {
+            ps.setString(1, code);
+            ps.setString(2, name);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String existingCode = rs.getString(1);
+                    String existingName = rs.getString(2);
+                    if (existingCode.equalsIgnoreCase(code)) {
+                        JOptionPane.showMessageDialog(this, "حظر أمني: رقم الحساب (" + code + ") موجود مسبقاً في دليل الحسابات.", "رفض الإضافة", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                    if (existingName.equalsIgnoreCase(name)) {
+                        JOptionPane.showMessageDialog(this, "حظر أمني: اسم الحساب (\"" + name + "\") موجود مسبقاً في الشجرة لمنع تكرار الحسابات.", "رفض الإضافة", JOptionPane.ERROR_MESSAGE);
+                        return;
                     }
                 }
-            } catch (IOException ignored) {}
-        }
+            }
+        } catch (Exception ignored) {}
 
         String classificationText = cmbType.getSelectedIndex() == 0 ? "حساب فرعي" : "حساب رئيسي";
         this.formattedAccountResult = String.format(Locale.US, "%s - %s (%s)", code, name, classificationText);
 
-        try (FileWriter writer = new FileWriter("AccountsData.txt", true)) {
-            writer.write(this.formattedAccountResult + "\n");
-        } catch (IOException ignored) {}
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement("INSERT INTO chart_of_accounts (account_code, account_name, account_level, is_sub_account, parent_code, current_balance) VALUES (?, ?, ?, ?, ?, 0)")) {
+            ps.setString(1, code);
+            ps.setString(2, name);
+            ps.setInt(3, code.length());
+            ps.setBoolean(4, cmbType.getSelectedIndex() == 0);
+            ps.setString(5, txtParentCode.getText().trim());
+            ps.executeUpdate();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "خطأ حفظ في قاعدة البيانات: " + ex.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
 
         this.accountCreatedOrUpdated = true;
         JOptionPane.showMessageDialog(this, "تم إضافة الحساب بالشجرة بنجاح برقم: " + code, "نجاح", JOptionPane.INFORMATION_MESSAGE);

@@ -26,9 +26,7 @@ import java.util.List;
 public class TreasuryVoucherForm extends JFrame {
 
     private static final String LOG_FILE = "TreasuryVouchersLog.txt";
-    private static final String ACCOUNTS_FILE = "AccountsData.txt";
-
-    // عناصر إدخال السند
+        // عناصر إدخال السند
     private JComboBox<String> cmbVoucherType; // سند قبض / سند صرف
     private JComboBox<String> cmbPaymentMethod; // نقداً (الصندوق) / شيك بنكي / تحويل
     private JTextField txtVoucherNumber;
@@ -494,17 +492,14 @@ public class TreasuryVoucherForm extends JFrame {
 
     private void loadAccountsData() {
         masterAccountList.clear();
-        File file = new File(ACCOUNTS_FILE);
-        if (file.exists()) {
-            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.trim().isEmpty() && !line.startsWith("#")) {
-                        masterAccountList.add(line.trim());
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT account_code, account_name, is_sub_account, account_level FROM chart_of_accounts WHERE is_sub_account=1 ORDER BY account_code");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                String display = rs.getString(1) + " - " + rs.getString(2) + " (حساب فرعي - مستوى " + rs.getInt(4) + ")";
+                masterAccountList.add(display);
+            }
+        } catch (Exception ignored) {}
     }
 
     public static void main(String[] args) {

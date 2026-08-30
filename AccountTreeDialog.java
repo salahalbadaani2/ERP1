@@ -21,13 +21,11 @@ import java.util.List;
  * 1. الإضافة (حساب موازي بنفس المستوى / حساب متفرع ابن)
  * 2. التعديل والحذف الآمن برمجياً
  * 3. التكبير والتصغير المتجاوب
- * 4. التوافقية الشاملة مع ملف AccountsData.txt وقاعدة بيانات MySQL
+ * 4. القراءة حصراً من قاعدة البيانات عبر DatabaseManager (بدون ملفات نصية)
  */
 public class AccountTreeDialog extends JFrame {
 
-    private static final String ACCOUNTS_FILE = "AccountsData.txt";
-
-    // كائن يمثل بيانات الحساب في الشجرة
+        // كائن يمثل بيانات الحساب في الشجرة
     public static class AccountNodeData {
         private String code;
         private String name;
@@ -453,49 +451,6 @@ public class AccountTreeDialog extends JFrame {
             }
         } catch (Exception ignored) {}
 
-        // 2. إذا لم تكن قاعدة البيانات متاحة، نقرأ من ملف AccountsData.txt
-        if (!loadedFromDb || accountList.isEmpty()) {
-            File file = new File(ACCOUNTS_FILE);
-            if (file.exists()) {
-                try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        if (line.trim().isEmpty() || line.startsWith("#")) continue;
-                        String[] parts = line.split("\\|");
-                        if (parts.length >= 6) {
-                            String code = parts[0].trim();
-                            String name = parts[1].trim();
-                            int level = Integer.parseInt(parts[2].trim());
-                            String type = parts[3].trim();
-                            String parentCode = parts[4].trim();
-                            double balance = Double.parseDouble(parts[5].trim());
-
-                            if (filterRootCode == null || code.startsWith(filterRootCode)) {
-                                accountList.add(new AccountNodeData(code, name, level, type, parentCode, balance));
-                            }
-                        } else if (line.contains(" - ")) {
-                            String[] displayParts = line.split(" - ", 2);
-                            String code = displayParts[0].trim();
-                            String displayName = displayParts[1].trim();
-                            if (code.isEmpty() || !code.matches("\\d+")) continue;
-
-                            boolean isSub = displayName.contains("حساب فرعي");
-                            int level = displayName.contains("مستوى ")
-                                    ? parseLevel(displayName)
-                                    : code.length();
-                            String name = displayName.replaceFirst("\\s*\\(حساب.*\\)$", "").trim();
-                            String parentCode = inferParentCode(code);
-                            if (filterRootCode == null || code.startsWith(filterRootCode)) {
-                                accountList.add(new AccountNodeData(code, name, level, isSub ? "فرعي" : "رئيسي", parentCode, 0.0));
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    System.err.println("تحذير: خطأ في قراءة AccountsData.txt: " + e.getMessage());
-                }
-            }
-        }
-
         if (accountList.isEmpty()) {
             populateDefaultAccounts();
         }
@@ -513,10 +468,13 @@ public class AccountTreeDialog extends JFrame {
         accountList.add(new AccountNodeData("123020001", "شركة الأمل للتوزيع والتجارة", 6, "فرعي", "12302", 845000));
         accountList.add(new AccountNodeData("123020002", "مؤسسة النور والبركة للتجارة", 6, "فرعي", "12302", 320000));
 
-        accountList.add(new AccountNodeData("2", "الالتزامات وحقوق الملكية", 1, "رئيسي", "", 0));
+        accountList.add(new AccountNodeData("2", "الخصوم", 1, "رئيسي", "", 0));
         accountList.add(new AccountNodeData("22", "الالتزامات المتداولة", 2, "رئيسي", "2", 0));
         accountList.add(new AccountNodeData("2203", "الأمانات الضريبية", 3, "رئيسي", "22", 0));
         accountList.add(new AccountNodeData("220301", "أمانات ضريبة المبيعات والقيمة المضافة", 6, "فرعي", "2203", 145000));
+
+        accountList.add(new AccountNodeData("3", "حقوق الملكية", 1, "رئيسي", "", 0));
+        accountList.add(new AccountNodeData("31", "رأس المال والأرباح المحتجزة", 2, "رئيسي", "3", 0));
 
         accountList.add(new AccountNodeData("4", "الإيرادات والمبيعات", 1, "رئيسي", "", 0));
         accountList.add(new AccountNodeData("41", "إيرادات النشاط الجاري", 2, "رئيسي", "4", 0));
@@ -782,18 +740,11 @@ public class AccountTreeDialog extends JFrame {
     }
 
     private void appendAccountToFile(AccountNodeData account) {
-        try (FileWriter writer = new FileWriter(ACCOUNTS_FILE, true)) {
-            writer.write(account.getCode() + " - " + account.getName() + " (حساب " + account.getType() + " - مستوى " + account.getLevel() + ")\n");
-        } catch (IOException ignored) {}
+        // تم إلغاء الكتابة لملف AccountsData.txt - المصدر الوحيد هو قاعدة البيانات
     }
 
     private void rewriteAccountsFile() {
-        try (FileWriter writer = new FileWriter(ACCOUNTS_FILE, false)) {
-            writer.write("اختر أو اكتب للبحث...\n");
-            for (AccountNodeData account : accountList) {
-                writer.write(account.getCode() + " - " + account.getName() + " (حساب " + account.getType() + " - مستوى " + account.getLevel() + ")\n");
-            }
-        } catch (IOException ignored) {}
+        // تم إلغاء الكتابة لملف AccountsData.txt
     }
 
     private void deleteAccountFromStorage(String code) {

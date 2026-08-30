@@ -5,6 +5,7 @@ import java.awt.*;
 import java.io.*;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,9 +22,7 @@ import java.util.List;
 public class ItemManagementForm extends JFrame {
 
     private static final String ITEMS_FILE = "ItemsData.txt";
-    private static final String ACCOUNTS_FILE = "AccountsData.txt";
-
-    // ------------------------------------------------------------------------
+        // ------------------------------------------------------------------------
     // عناصر اختيار الحساب الشجري القياسي (طريقة شاشة الخزينة والبنك)
     // ------------------------------------------------------------------------
     private JTextField txtSubAccountCode;
@@ -273,19 +272,17 @@ public class ItemManagementForm extends JFrame {
         masterAccountList.clear();
         cmbSubAccount.removeAllItems();
         cmbSubAccount.addItem("... اختر أو اكتب للبحث في الشجرة");
-
-        File file = new File(ACCOUNTS_FILE);
-        if (file.exists()) {
-            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.trim().isEmpty()) {
-                        masterAccountList.add(line.trim());
-                        cmbSubAccount.addItem(line.trim());
-                    }
-                }
-            } catch (IOException ignored) {}
-        }
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT account_code, account_name, is_sub_account, account_level FROM chart_of_accounts WHERE is_sub_account=1 ORDER BY account_code");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                String code = rs.getString(1);
+                String name = rs.getString(2);
+                String display = code + " - " + name + " (حساب فرعي - مستوى " + rs.getInt(4) + ")";
+                masterAccountList.add(display);
+                cmbSubAccount.addItem(display);
+            }
+        } catch (Exception ignored) {}
     }
 
     /**

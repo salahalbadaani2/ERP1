@@ -26,9 +26,7 @@ import java.util.List;
 public class SalesInvoice extends JFrame {
 
     private static final String LOG_FILE = "SalesInvoiceLog.txt";
-    private static final String ACCOUNTS_FILE = "AccountsData.txt";
-
-    // مكونات الواجهة الرسومية
+        // مكونات الواجهة الرسومية
     private JTextField txtInvoiceNo;
     private JTextField txtDate;
     private JTextField txtCustomerCode;
@@ -270,20 +268,7 @@ public class SalesInvoice extends JFrame {
             }
         } catch (Exception ignored) {}
 
-        // 2. إذا لم تتوفر قاعدة البيانات، نقرأ من ملف AccountsData.txt
-        if (masterAccountList.isEmpty()) {
-            File file = new File(ACCOUNTS_FILE);
-            if (file.exists()) {
-                try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        if (!line.trim().isEmpty() && !line.startsWith("#")) {
-                            masterAccountList.add(line.trim());
-                        }
-                    }
-                } catch (IOException ignored) {}
-            }
-        }
+        // تم إلغاء القراءة من AccountsData.txt - المصدر الوحيد هو قاعدة البيانات
 
         // 3. القيم الافتراضية المعتمدة
         if (masterAccountList.isEmpty()) {
