@@ -2,7 +2,6 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellEditor;
 import java.awt.*;
-import java.awt.event.ActionEvent;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -13,20 +12,22 @@ import java.util.Vector;
 public class PurchaseInvoiceForm extends JFrame {
     private final JTextField invoiceNumber = new JTextField();
     private final JTextField invoiceDate = new JTextField(LocalDate.now().toString());
-    private JTextField inventoryAccount = new JTextField();
     private JTextField supplierAccount = new JTextField();
     private JTextField inputTaxAccount = new JTextField("220301");
-    private JTextField unitCost = new JTextField();
+    private JCheckBox chkApplyTax = new JCheckBox("تطبيق الضريبة");
+    private JTextField txtTaxRate = new JTextField("0.15");
     private DefaultTableModel tableModel;
     private JTable itemTable;
     private final JTextField totalField = new JTextField("0.00");
+    private final JTextField taxAmountField = new JTextField("0.00");
+    private final JTextField grandTotalField = new JTextField("0.00");
 
-    private static final String[] COLUMNS = {"م", "كود الصنف", "اسم الصنف", "نوع الوحدة", "الكمية", "الجرام", "سعر الوحدة", "الإجمالي"};
+    private static final String[] COLUMNS = {"م", "نوع المخزون", "اسم الصنف", "رقم الصنف", "نوع الوحدة", "الكمية", "الجرام", "سعر الوحدة", "الإجمالي"};
 
     public PurchaseInvoiceForm() {
         setTitle("نظام ERP المصنعي - فاتورة المشتريات");
-        setSize(1200, 750);
-        setMinimumSize(new Dimension(1000, 600));
+        setSize(1300, 800);
+        setMinimumSize(new Dimension(1100, 650));
         setResizable(true);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -48,14 +49,19 @@ public class PurchaseInvoiceForm extends JFrame {
         headerPanel.add(invoiceNumber);
         headerPanel.add(new JLabel("التاريخ:"));
         headerPanel.add(invoiceDate);
-        headerPanel.add(new JLabel("حساب مخزون المواد الخام:"));
-        headerPanel.add(accountField(inventoryAccount, "121"));
         headerPanel.add(new JLabel("حساب المورد:"));
         headerPanel.add(accountField(supplierAccount, "21"));
         headerPanel.add(new JLabel("حساب ضريبة المدخلات:"));
         headerPanel.add(accountField(inputTaxAccount, "22"));
-        headerPanel.add(new JLabel("تكلفة الوحدة:"));
-        headerPanel.add(unitCost);
+
+        JPanel taxPanel = new JPanel(new GridLayout(1, 4, 10, 5));
+        taxPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        taxPanel.add(chkApplyTax);
+        taxPanel.add(new JLabel("النسبة:"));
+        taxPanel.add(txtTaxRate);
+        taxPanel.add(new JLabel("مبلغ الضريبة:"));
+        taxPanel.add(taxAmountField);
+        headerPanel.add(taxPanel);
 
         JPanel tablePanel = new JPanel(new BorderLayout(10, 10));
         tablePanel.setBorder(BorderFactory.createTitledBorder("جدول الأصناف"));
@@ -64,20 +70,17 @@ public class PurchaseInvoiceForm extends JFrame {
         tableModel = new DefaultTableModel(COLUMNS, 0) {
             @Override
             public Class<?> getColumnClass(int column) {
-                if (column == 0) return Integer.class;
-                if (column == 3) return String.class;
                 return String.class;
             }
-
             @Override
             public boolean isCellEditable(int row, int column) {
-                return column >= 1 && column <= 6;
+                return column >= 1 && column <= 8;
             }
         };
         itemTable = new JTable(tableModel) {
             @Override
             public TableCellEditor getCellEditor(int row, int column) {
-                if (column == 3) {
+                if (column == 4) {
                     return new DefaultCellEditor(new JComboBox<>(new String[]{"COUNT", "WEIGHT"}));
                 }
                 return super.getCellEditor(row, column);
@@ -95,13 +98,16 @@ public class PurchaseInvoiceForm extends JFrame {
         tableButtons.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         JButton addRowBtn = new JButton("إضافة سطر");
         JButton removeRowBtn = new JButton("حذف السطر المحدد");
-        addRowBtn.addActionListener(e -> addTableRow());
+        addRowBtn.addActionListener(e -> {
+            addTableRow();
+            renumberRows();
+        });
         removeRowBtn.addActionListener(e -> removeSelectedRow());
         tableButtons.add(addRowBtn);
         tableButtons.add(removeRowBtn);
         tablePanel.add(tableButtons, BorderLayout.SOUTH);
 
-        JPanel bottomPanel = new JPanel(new GridLayout(0, 2, 10, 10));
+        JPanel bottomPanel = new JPanel(new GridLayout(0, 3, 10, 10));
         bottomPanel.setBorder(BorderFactory.createTitledBorder("المبالغ الإجمالية"));
         bottomPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         bottomPanel.add(new JLabel("الإجمالي الكلي:"));
@@ -109,6 +115,11 @@ public class PurchaseInvoiceForm extends JFrame {
         totalField.setFont(new Font("Tahoma", Font.BOLD, 14));
         totalField.setHorizontalAlignment(SwingConstants.RIGHT);
         bottomPanel.add(totalField);
+        bottomPanel.add(new JLabel("الإجمالي مع الضريبة:"));
+        grandTotalField.setEditable(false);
+        grandTotalField.setFont(new Font("Tahoma", Font.BOLD, 14));
+        grandTotalField.setHorizontalAlignment(SwingConstants.RIGHT);
+        bottomPanel.add(grandTotalField);
 
         mainPanel.add(headerPanel, BorderLayout.NORTH);
         mainPanel.add(tablePanel, BorderLayout.CENTER);
@@ -135,6 +146,7 @@ public class PurchaseInvoiceForm extends JFrame {
         rowData.add(String.valueOf(row + 1));
         rowData.add("");
         rowData.add("");
+        rowData.add("");
         rowData.add("COUNT");
         rowData.add("");
         rowData.add("");
@@ -154,7 +166,7 @@ public class PurchaseInvoiceForm extends JFrame {
 
     private void renumberRows() {
         for (int i = 0; i < tableModel.getRowCount(); i++) {
-            tableModel.setValueAt(i + 1, i, 0);
+            tableModel.setValueAt(String.valueOf(i + 1), i, 0);
         }
     }
 
@@ -162,19 +174,23 @@ public class PurchaseInvoiceForm extends JFrame {
         double total = 0.0;
         for (int i = 0; i < tableModel.getRowCount(); i++) {
             try {
-                double qty = parseDoubleSafe(tableModel.getValueAt(i, 4));
-                double gram = parseDoubleSafe(tableModel.getValueAt(i, 5));
-                double price = parseDoubleSafe(tableModel.getValueAt(i, 6));
-                String unitType = (String) tableModel.getValueAt(i, 3);
+                double qty = parseDoubleSafe(tableModel.getValueAt(i, 5));
+                double gram = parseDoubleSafe(tableModel.getValueAt(i, 6));
+                double price = parseDoubleSafe(tableModel.getValueAt(i, 7));
+                String unitType = (String) tableModel.getValueAt(i, 4);
                 if ("WEIGHT".equals(unitType)) {
                     qty = qty + (gram / 1000.0);
                 }
                 double totalVal = qty * price;
-                tableModel.setValueAt(String.format("%,.2f", totalVal), i, 7);
+                tableModel.setValueAt(String.format("%,.2f", totalVal), i, 8);
                 total += totalVal;
             } catch (Exception ignored) {}
         }
         totalField.setText(String.format("%,.2f", total));
+        double taxRate = parseDoubleSafe(txtTaxRate.getText());
+        double taxAmount = chkApplyTax.isSelected() ? total * taxRate : 0.0;
+        taxAmountField.setText(String.format("%,.2f", taxAmount));
+        grandTotalField.setText(String.format("%,.2f", total + taxAmount));
     }
 
     private double parseDoubleSafe(Object value) {
@@ -193,11 +209,41 @@ public class PurchaseInvoiceForm extends JFrame {
         browse.addActionListener(e -> {
             AccountTreeDialog dialog = new AccountTreeDialog(this, prefix);
             dialog.setVisible(true);
-            if (dialog.isAccountSelected()) field.setText(dialog.getSelectedAccountCode());
+            if (dialog.isAccountSelected()) {
+                field.setText(dialog.getSelectedAccountCode());
+                autoFillItemCode(field);
+            }
         });
         wrapper.add(field, BorderLayout.CENTER);
         wrapper.add(browse, BorderLayout.EAST);
         return wrapper;
+    }
+
+    private void autoFillItemCode(JTextField accountField) {
+        String accountCode = accountField.getText().trim();
+        if (accountCode.isEmpty()) return;
+        String sql = "SELECT item_code, item_name, unit_type FROM inventory_items WHERE item_code = ? OR inventory_account = ?";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, accountCode);
+            ps.setString(2, accountCode);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String itemCode = rs.getString("item_code");
+                    String itemName = rs.getString("item_name");
+                    String unitType = rs.getString("unit_type");
+                    if (tableModel.getRowCount() == 0) {
+                        addTableRow();
+                    }
+                    int row = 0;
+                    tableModel.setValueAt(itemCode, row, 3);
+                    tableModel.setValueAt(itemName, row, 2);
+                    tableModel.setValueAt(unitType, row, 4);
+                    renumberRows();
+                    calculateRowTotals();
+                }
+            }
+        } catch (SQLException ignored) {}
     }
 
     private void post() {
@@ -206,12 +252,22 @@ public class PurchaseInvoiceForm extends JFrame {
                 throw new IllegalArgumentException("يجب إضافة صنف واحد على الأقل في الجدول.");
             }
             double total = parseDoubleSafe(totalField.getText());
-            String itemCode = tableModel.getValueAt(0, 1).toString().trim();
+            double taxAmount = parseDoubleSafe(taxAmountField.getText());
+            double grandTotal = parseDoubleSafe(grandTotalField.getText());
+            String itemCode = tableModel.getValueAt(0, 3).toString().trim();
             String itemName = tableModel.getValueAt(0, 2).toString().trim();
-            double unitCostVal = parseDoubleSafe(this.unitCost.getText());
-            PurchaseInvoice invoice = new PurchaseInvoice(invoiceNumber.getText(), inventoryAccount.getText().trim(),
-                    supplierAccount.getText().trim(), inputTaxAccount.getText().trim(), total, false, 0.0,
-                    itemCode, parseDoubleSafe(tableModel.getValueAt(0, 4)), unitCostVal);
+            String unitType = (String) tableModel.getValueAt(0, 4);
+            double qty = parseDoubleSafe(tableModel.getValueAt(0, 5));
+            double gram = parseDoubleSafe(tableModel.getValueAt(0, 6));
+            if ("WEIGHT".equals(unitType)) {
+                qty = qty + (gram / 1000.0);
+            }
+            double unitCost = parseDoubleSafe(tableModel.getValueAt(0, 7));
+            boolean taxApplied = chkApplyTax.isSelected();
+            double taxRate = parseDoubleSafe(txtTaxRate.getText());
+            PurchaseInvoice invoice = new PurchaseInvoice(invoiceNumber.getText(), "1210101",
+                    supplierAccount.getText().trim(), inputTaxAccount.getText().trim(), total, taxApplied, taxRate,
+                    itemCode, qty, unitCost);
             if (!invoice.postToAccounting()) throw new IllegalStateException("تعذر اعتماد فاتورة المشتريات.");
             JOptionPane.showMessageDialog(this, "تم اعتماد الفاتورة وترحيل قيد المخزون والمورد وتحديث رصيده.", "نجاح", JOptionPane.INFORMATION_MESSAGE);
             reset();
@@ -223,17 +279,19 @@ public class PurchaseInvoiceForm extends JFrame {
     private void preview() {
         StringBuilder rowsHtml = new StringBuilder();
         for (int i = 0; i < tableModel.getRowCount(); i++) {
-            String code = tableModel.getValueAt(i, 1).toString();
-            String name = tableModel.getValueAt(i, 2).toString();
-            String unitType = tableModel.getValueAt(i, 3).toString();
-            String qty = tableModel.getValueAt(i, 4).toString();
-            String gram = tableModel.getValueAt(i, 5).toString();
-            String price = tableModel.getValueAt(i, 6).toString();
-            String total = tableModel.getValueAt(i, 7).toString();
-            rowsHtml.append("<tr><td>").append(i + 1).append("</td><td>").append(code)
-                    .append("</td><td>").append(name).append("</td><td>").append(unitType)
-                    .append("</td><td>").append(qty).append("</td><td>").append(gram)
-                    .append("</td><td>").append(price).append("</td><td>").append(total).append("</td></tr>");
+            String stockType = tableModel.getValueAt(i, 1).toString();
+            String itemName = tableModel.getValueAt(i, 2).toString();
+            String itemCode = tableModel.getValueAt(i, 3).toString();
+            String unitType = tableModel.getValueAt(i, 4).toString();
+            String qty = tableModel.getValueAt(i, 5).toString();
+            String gram = tableModel.getValueAt(i, 6).toString();
+            String price = tableModel.getValueAt(i, 7).toString();
+            String total = tableModel.getValueAt(i, 8).toString();
+            rowsHtml.append("<tr><td>").append(i + 1).append("</td><td>").append(stockType)
+                    .append("</td><td>").append(itemName).append("</td><td>").append(itemCode)
+                    .append("</td><td>").append(unitType).append("</td><td>").append(qty)
+                    .append("</td><td>").append(gram).append("</td><td>").append(price)
+                    .append("</td><td>").append(total).append("</td></tr>");
         }
         String html = "<html dir='rtl' lang='ar'><head><meta charset='UTF-8'>"
                 + "<style>body{font-family:Tahoma,sans-serif;font-size:12px;} table{border-collapse:collapse;width:100%;}"
@@ -243,10 +301,11 @@ public class PurchaseInvoiceForm extends JFrame {
                 + "<p>رقم الفاتورة: " + invoiceNumber.getText() + "</p>"
                 + "<p>التاريخ: " + invoiceDate.getText() + "</p>"
                 + "<p>حساب المورد: " + supplierAccount.getText() + "</p>"
-                + "<p>الإجمالي: " + totalField.getText() + "</p>"
-                + "<table><thead><tr><th>م</th><th>كود الصنف</th><th>اسم الصنف</th><th>نوع الوحدة</th><th>الكمية</th><th>الجرام</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>"
+                + "<p>الضريبة المطبقة: " + (chkApplyTax.isSelected() ? "نعم (" + txtTaxRate.getText() + ")" : "لا") + "</p>"
+                + "<table><thead><tr><th>م</th><th>نوع المخزون</th><th>اسم الصنف</th><th>رقم الصنف</th><th>نوع الوحدة</th><th>الكمية</th><th>الجرام</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>"
                 + "<tbody>" + rowsHtml.toString() + "</tbody>"
-                + "<tfoot><tr class='total-row'><td colspan='7'>الإجمالي الكلي</td><td>" + totalField.getText() + "</td></tr></tfoot>"
+                + "<tfoot><tr class='total-row'><td colspan='8'>الإجمالي الكلي</td><td>" + totalField.getText() + "</td></tr>"
+                + "<tr class='total-row'><td colspan='8'>الإجمالي مع الضريبة</td><td>" + grandTotalField.getText() + "</td></tr></tfoot>"
                 + "</table><p>التوقيع: ____________________</p></body></html>";
         new DocumentPreviewDialog(this, "فاتورة المشتريات", html).setVisible(true);
     }
@@ -254,10 +313,12 @@ public class PurchaseInvoiceForm extends JFrame {
     private void reset() {
         invoiceNumber.setText(DocumentNumberService.next("PURCHASE_INVOICE", "PUR-"));
         invoiceDate.setText(LocalDate.now().toString());
-        inventoryAccount.setText("");
         supplierAccount.setText("");
         inputTaxAccount.setText("220301");
-        unitCost.setText("");
+        chkApplyTax.setSelected(false);
+        txtTaxRate.setText("0.15");
+        taxAmountField.setText("0.00");
+        grandTotalField.setText("0.00");
         while (tableModel.getRowCount() > 0) tableModel.removeRow(0);
         totalField.setText("0.00");
     }

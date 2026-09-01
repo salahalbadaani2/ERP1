@@ -19,20 +19,23 @@ public class SalesInvoiceForm extends JFrame {
     private final JTextField txtCogsAccount = new JTextField();
     private final JTextField txtFinishedGoodsAccount = new JTextField();
     private JComboBox<String> cmbPaymentType;
+    private JCheckBox chkApplyTax = new JCheckBox("تطبيق الضريبة");
+    private JTextField txtTaxRate = new JTextField("0.15");
     private DefaultTableModel tableModel;
     private JTable itemTable;
     private final JTextField txtBaseAmount = new JTextField();
+    private final JTextField txtTaxAmount = new JTextField("0.00");
     private final JTextField txtTotalAmount = new JTextField();
+    private final JTextField txtGrandTotalAmount = new JTextField();
     private final JTextField txtTotalCogs = new JTextField();
     private final JTextField txtExpectedProfit = new JTextField();
-    private final JTextField txtTaxAmount = new JTextField("0.00");
 
-    private static final String[] COLUMNS = {"م", "كود الصنف", "اسم الصنف", "نوع الوحدة", "الكمية", "الجرام", "سعر الوحدة", "الإجمالي"};
+    private static final String[] COLUMNS = {"م", "نوع المخزون", "اسم الصنف", "رقم الصنف", "نوع الوحدة", "الكمية", "الجرام", "سعر الوحدة", "الإجمالي"};
 
     public SalesInvoiceForm() {
         setTitle("نظام ERP المصنعي - فاتورة مبيعات");
-        setSize(1200, 750);
-        setMinimumSize(new Dimension(1000, 600));
+        setSize(1300, 800);
+        setMinimumSize(new Dimension(1100, 650));
         setResizable(true);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -96,7 +99,10 @@ public class SalesInvoiceForm extends JFrame {
         row2.add(new JLabel("حساب العميل المدين:"), BorderLayout.EAST);
         txtCustomerAccount.setFont(new Font("Tahoma", Font.PLAIN, 12));
         JButton btnBrowseCustomer = new JButton("دليل الحسابات");
-        btnBrowseCustomer.addActionListener(e -> browseAccounts(txtCustomerAccount, "123"));
+        btnBrowseCustomer.addActionListener(e -> {
+            browseAccounts(txtCustomerAccount, "123");
+            autoFillItemCode(txtCustomerAccount);
+        });
         JPanel custInput = new JPanel(new BorderLayout(4, 0));
         custInput.setOpaque(false);
         custInput.add(txtCustomerAccount, BorderLayout.CENTER);
@@ -105,12 +111,23 @@ public class SalesInvoiceForm extends JFrame {
         panel.add(row2);
         panel.add(Box.createRigidArea(new Dimension(0, 8)));
 
-        JPanel rowPay = new JPanel(new GridLayout(1, 2, 8, 5));
+        JPanel rowPay = new JPanel(new GridLayout(1, 3, 8, 5));
         rowPay.setOpaque(false);
         rowPay.add(new JLabel("طريقة السداد:"));
         cmbPaymentType = new JComboBox<>(new String[]{"آجل (على حساب العميل 12302)", "نقدي (الصندوق العام 11101)"});
         rowPay.add(cmbPaymentType);
         panel.add(rowPay);
+        panel.add(Box.createRigidArea(new Dimension(0, 8)));
+
+        JPanel taxPanel = new JPanel(new GridLayout(1, 4, 10, 5));
+        taxPanel.setOpaque(false);
+        taxPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        taxPanel.add(chkApplyTax);
+        taxPanel.add(new JLabel("النسبة:"));
+        taxPanel.add(txtTaxRate);
+        taxPanel.add(new JLabel("مبلغ الضريبة:"));
+        taxPanel.add(txtTaxAmount);
+        panel.add(taxPanel);
         panel.add(Box.createRigidArea(new Dimension(0, 8)));
 
         JPanel accBox = new JPanel(new GridLayout(5, 2, 6, 5));
@@ -140,13 +157,13 @@ public class SalesInvoiceForm extends JFrame {
             }
             @Override
             public boolean isCellEditable(int row, int column) {
-                return column >= 1 && column <= 6;
+                return column >= 1 && column <= 8;
             }
         };
         itemTable = new JTable(tableModel) {
             @Override
             public TableCellEditor getCellEditor(int row, int column) {
-                if (column == 3) {
+                if (column == 4) {
                     return new DefaultCellEditor(new JComboBox<>(new String[]{"COUNT", "WEIGHT"}));
                 }
                 return super.getCellEditor(row, column);
@@ -163,7 +180,10 @@ public class SalesInvoiceForm extends JFrame {
         tableBtnPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         JButton addRowBtn = new JButton("إضافة سطر");
         JButton removeRowBtn = new JButton("حذف السطر المحدد");
-        addRowBtn.addActionListener(e -> addTableRow());
+        addRowBtn.addActionListener(e -> {
+            addTableRow();
+            renumberRows();
+        });
         removeRowBtn.addActionListener(e -> removeSelectedRow());
         tableBtnPanel.add(addRowBtn);
         tableBtnPanel.add(removeRowBtn);
@@ -184,7 +204,7 @@ public class SalesInvoiceForm extends JFrame {
         panel.setBackground(Color.WHITE);
         panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
 
-        JPanel finBox = new JPanel(new GridLayout(6, 2, 8, 6));
+        JPanel finBox = new JPanel(new GridLayout(7, 2, 8, 6));
         finBox.setBorder(BorderFactory.createTitledBorder("ملخص الفاتورة"));
         finBox.setOpaque(false);
         finBox.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
@@ -194,7 +214,7 @@ public class SalesInvoiceForm extends JFrame {
         txtBaseAmount.setFont(new Font("Tahoma", Font.BOLD, 12));
         finBox.add(txtBaseAmount);
 
-        finBox.add(new JLabel("الضريبة (15%):"));
+        finBox.add(new JLabel("مبلغ الضريبة:"));
         txtTaxAmount.setEditable(false);
         txtTaxAmount.setFont(new Font("Tahoma", Font.BOLD, 12));
         finBox.add(txtTaxAmount);
@@ -204,6 +224,12 @@ public class SalesInvoiceForm extends JFrame {
         txtTotalAmount.setFont(new Font("Tahoma", Font.BOLD, 13));
         txtTotalAmount.setForeground(new Color(37, 99, 235));
         finBox.add(txtTotalAmount);
+
+        finBox.add(new JLabel("الإجمالي مع الضريبة:"));
+        txtGrandTotalAmount.setEditable(false);
+        txtGrandTotalAmount.setFont(new Font("Tahoma", Font.BOLD, 13));
+        txtGrandTotalAmount.setForeground(new Color(37, 99, 235));
+        finBox.add(txtGrandTotalAmount);
 
         finBox.add(new JLabel("إجمالي تكلفة البضاعة المباعة (COGS):"));
         txtTotalCogs.setEditable(false);
@@ -266,6 +292,7 @@ public class SalesInvoiceForm extends JFrame {
         rowData.add(String.valueOf(row + 1));
         rowData.add("");
         rowData.add("");
+        rowData.add("");
         rowData.add("COUNT");
         rowData.add("");
         rowData.add("");
@@ -289,27 +316,57 @@ public class SalesInvoiceForm extends JFrame {
         }
     }
 
+    private void autoFillItemCode(JTextField accountField) {
+        String accountCode = accountField.getText().trim();
+        if (accountCode.isEmpty()) return;
+        String sql = "SELECT item_code, item_name, unit_type FROM inventory_items WHERE item_code = ? OR inventory_account = ?";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, accountCode);
+            ps.setString(2, accountCode);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String itemCode = rs.getString("item_code");
+                    String itemName = rs.getString("item_name");
+                    String unitType = rs.getString("unit_type");
+                    if (tableModel.getRowCount() == 0) {
+                        addTableRow();
+                    }
+                    int row = 0;
+                    tableModel.setValueAt(itemCode, row, 3);
+                    tableModel.setValueAt(itemName, row, 2);
+                    tableModel.setValueAt(unitType, row, 4);
+                    renumberRows();
+                    calculateRowTotals();
+                }
+            }
+        } catch (SQLException ignored) {}
+    }
+
     private void calculateRowTotals() {
         double total = 0.0;
         double totalCogs = 0.0;
         for (int i = 0; i < tableModel.getRowCount(); i++) {
             try {
-                double qty = parseDoubleSafe(tableModel.getValueAt(i, 4));
-                double gram = parseDoubleSafe(tableModel.getValueAt(i, 5));
-                double price = parseDoubleSafe(tableModel.getValueAt(i, 6));
-                String unitType = (String) tableModel.getValueAt(i, 3);
+                double qty = parseDoubleSafe(tableModel.getValueAt(i, 5));
+                double gram = parseDoubleSafe(tableModel.getValueAt(i, 6));
+                double price = parseDoubleSafe(tableModel.getValueAt(i, 7));
+                String unitType = (String) tableModel.getValueAt(i, 4);
                 if ("WEIGHT".equals(unitType)) {
                     qty = qty + (gram / 1000.0);
                 }
                 double totalVal = qty * price;
-                tableModel.setValueAt(String.format("%,.2f", totalVal), i, 7);
+                tableModel.setValueAt(String.format("%,.2f", totalVal), i, 8);
                 total += totalVal;
                 totalCogs += qty * price;
             } catch (Exception ignored) {}
         }
         txtBaseAmount.setText(String.format("%,.2f YER", total));
-        txtTaxAmount.setText(String.format("%,.2f YER", 0.0));
+        double taxRate = parseDoubleSafe(txtTaxRate.getText());
+        double taxAmount = chkApplyTax.isSelected() ? total * taxRate : 0.0;
+        txtTaxAmount.setText(String.format("%,.2f YER", taxAmount));
         txtTotalAmount.setText(String.format("%,.2f YER", total));
+        txtGrandTotalAmount.setText(String.format("%,.2f YER", total + taxAmount));
         txtTotalCogs.setText(String.format("%,.2f YER", totalCogs));
         double profit = total - totalCogs;
         txtExpectedProfit.setText(String.format("%,.2f YER", profit));
@@ -341,12 +398,22 @@ public class SalesInvoiceForm extends JFrame {
             String cogsAcc = txtCogsAccount.getText().trim();
             String fgAcc = txtFinishedGoodsAccount.getText().trim();
             double total = parseDoubleSafe(txtTotalAmount.getText());
-            String item = tableModel.getValueAt(0, 1).toString();
+            double taxAmount = parseDoubleSafe(txtTaxAmount.getText());
+            double grandTotal = parseDoubleSafe(txtGrandTotalAmount.getText());
+            boolean taxApplied = chkApplyTax.isSelected();
+            double taxRate = parseDoubleSafe(txtTaxRate.getText());
+            String item = tableModel.getValueAt(0, 3).toString();
             String itemName = tableModel.getValueAt(0, 2).toString();
-            double unitCost = parseDoubleSafe(tableModel.getValueAt(0, 6));
+            String unitType = (String) tableModel.getValueAt(0, 4);
+            double qty = parseDoubleSafe(tableModel.getValueAt(0, 5));
+            double gram = parseDoubleSafe(tableModel.getValueAt(0, 6));
+            if ("WEIGHT".equals(unitType)) {
+                qty = qty + (gram / 1000.0);
+            }
+            double unitCost = parseDoubleSafe(tableModel.getValueAt(0, 7));
             boolean success = SalesPostingService.postSale(invoiceCode, invoiceDate,
                     custAcc, revAcc, taxAcc, cogsAcc, fgAcc, item, itemName,
-                    1, total, unitCost, false);
+                    qty, total, unitCost, taxApplied);
             if (!success) throw new IllegalStateException("تعذر اعتماد فاتورة المبيعات.");
             JOptionPane.showMessageDialog(this, "تم اعتماد فاتورة المبيعات وتسجيل حركة الصرف وتحديث المخزون.",
                     "نجاح", JOptionPane.INFORMATION_MESSAGE);
@@ -360,19 +427,23 @@ public class SalesInvoiceForm extends JFrame {
     private void previewInvoice() {
         try {
             double total = parseDoubleSafe(txtTotalAmount.getText());
+            double taxAmount = parseDoubleSafe(txtTaxAmount.getText());
+            double grandTotal = parseDoubleSafe(txtGrandTotalAmount.getText());
             StringBuilder rowsHtml = new StringBuilder();
             for (int i = 0; i < tableModel.getRowCount(); i++) {
-                String code = tableModel.getValueAt(i, 1).toString();
+                String stockType = tableModel.getValueAt(i, 1).toString();
                 String name = tableModel.getValueAt(i, 2).toString();
-                String unitType = tableModel.getValueAt(i, 3).toString();
-                String qty = tableModel.getValueAt(i, 4).toString();
-                String gram = tableModel.getValueAt(i, 5).toString();
-                String price = tableModel.getValueAt(i, 6).toString();
-                String totalVal = tableModel.getValueAt(i, 7).toString();
-                rowsHtml.append("<tr><td>").append(i + 1).append("</td><td>").append(code)
-                        .append("</td><td>").append(name).append("</td><td>").append(unitType)
-                        .append("</td><td>").append(qty).append("</td><td>").append(gram)
-                        .append("</td><td>").append(price).append("</td><td>").append(totalVal).append("</td></tr>");
+                String itemCode = tableModel.getValueAt(i, 3).toString();
+                String unitType = tableModel.getValueAt(i, 4).toString();
+                String qty = tableModel.getValueAt(i, 5).toString();
+                String gram = tableModel.getValueAt(i, 6).toString();
+                String price = tableModel.getValueAt(i, 7).toString();
+                String totalVal = tableModel.getValueAt(i, 8).toString();
+                rowsHtml.append("<tr><td>").append(i + 1).append("</td><td>").append(stockType)
+                        .append("</td><td>").append(name).append("</td><td>").append(itemCode)
+                        .append("</td><td>").append(unitType).append("</td><td>").append(qty)
+                        .append("</td><td>").append(gram).append("</td><td>").append(price)
+                        .append("</td><td>").append(totalVal).append("</td></tr>");
             }
             String html = "<html dir='rtl' lang='ar'><head><meta charset='UTF-8'>"
                     + "<style>body{font-family:Tahoma,sans-serif;font-size:12px;} table{border-collapse:collapse;width:100%;}"
@@ -382,9 +453,11 @@ public class SalesInvoiceForm extends JFrame {
                     + "<p>رقم الفاتورة: " + txtInvoiceNumber.getText() + "</p>"
                     + "<p>التاريخ: " + txtInvoiceDate.getText() + "</p>"
                     + "<p>حساب العميل: " + txtCustomerAccount.getText() + "</p>"
-                    + "<table><thead><tr><th>م</th><th>كود الصنف</th><th>اسم الصنف</th><th>نوع الوحدة</th><th>الكمية</th><th>الجرام</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>"
+                    + "<p>الضريبة: " + (chkApplyTax.isSelected() ? "نعم (" + txtTaxRate.getText() + ")" : "لا") + "</p>"
+                    + "<table><thead><tr><th>م</th><th>نوع المخزون</th><th>اسم الصنف</th><th>رقم الصنف</th><th>نوع الوحدة</th><th>الكمية</th><th>الجرام</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>"
                     + "<tbody>" + rowsHtml.toString() + "</tbody>"
-                    + "<tfoot><tr class='total-row'><td colspan='7'>الإجمالي الكلي</td><td>" + String.format("%,.2f", total) + "</td></tr></tfoot>"
+                    + "<tfoot><tr class='total-row'><td colspan='8'>الإجمالي الكلي</td><td>" + total + "</td></tr>"
+                    + "<tr class='total-row'><td colspan='8'>الإجمالي مع الضريبة</td><td>" + grandTotal + "</td></tr></tfoot>"
                     + "</table><p>التوقيع: ____________________</p></body></html>";
             InvoicePrintPreviewDialog preview = new InvoicePrintPreviewDialog(
                     this,
@@ -393,14 +466,14 @@ public class SalesInvoiceForm extends JFrame {
                     txtInvoiceDate.getText().trim(),
                     txtCustomerAccount.getText().trim(),
                     "العميل",
-                    tableModel.getValueAt(0, 1).toString(),
+                    tableModel.getValueAt(0, 3).toString(),
                     tableModel.getValueAt(0, 2).toString(),
                     "مبيعات تجارية معتمدة",
                     1,
-                    parseDoubleSafe(tableModel.getValueAt(0, 6)),
+                    parseDoubleSafe(tableModel.getValueAt(0, 7)),
                     total,
-                    0.0,
-                    total,
+                    taxAmount,
+                    grandTotal,
                     "SALES"
             );
             preview.setVisible(true);
@@ -440,9 +513,12 @@ public class SalesInvoiceForm extends JFrame {
         txtFinishedGoodsAccount.setText("");
         txtBaseAmount.setText("0.00 YER");
         txtTotalAmount.setText("0.00 YER");
+        txtGrandTotalAmount.setText("0.00 YER");
         txtTotalCogs.setText("0.00 YER");
         txtExpectedProfit.setText("0.00 YER");
         txtTaxAmount.setText("0.00 YER");
+        chkApplyTax.setSelected(false);
+        txtTaxRate.setText("0.15");
         while (tableModel.getRowCount() > 0) tableModel.removeRow(0);
         calculateRowTotals();
     }
