@@ -46,6 +46,7 @@ public class ItemManagementForm extends JFrame {
     private JComboBox<String> cmbUom;
     private JComboBox<String> cmbUnitType;
     private JTextField txtConversionFactor;
+    private JTextField txtSubUom;
     private JTextField txtMinStockLevel;
     private JTextField txtExpiryDate;
     private JTextField txtBatchNo;
@@ -199,8 +200,14 @@ public class ItemManagementForm extends JFrame {
         cmbUom = new JComboBox<>(new String[]{"حبه", "جرام", "كيلو", "طن", "مل", "لتر", "باكت", "كرتون", "كيس", "عبوة", "+ إضافة وحدة جديدة..."});
         addComp(card, cmbUom, gbc, 3, 0);
 
-        addLabel(card, "معامل التحويل:", gbc, 2, 0);
-        txtConversionFactor = new JTextField("24.0", 10);
+        addLabel(card, "الوحدة الفرعية:", gbc, 0, 1);
+        txtSubUom = new JTextField(8);
+        txtSubUom.setEditable(false);
+        txtSubUom.setBackground(new Color(245, 245, 245));
+        addComp(card, txtSubUom, gbc, 1, 1);
+
+        addLabel(card, "معامل التحويل:", gbc, 2, 1);
+        txtConversionFactor = new JTextField("1", 10);
         ((AbstractDocument) txtConversionFactor.getDocument()).setDocumentFilter(new DocumentFilter() {
             @Override
             public void insertString(DocumentFilter.FilterBypass fb, int offset, String string, AttributeSet attr) throws BadLocationException {
@@ -211,27 +218,27 @@ public class ItemManagementForm extends JFrame {
                 if (text.matches("\\d*")) super.replace(fb, offset, length, text, attrs);
             }
         });
-        addComp(card, txtConversionFactor, gbc, 3, 0);
+        addComp(card, txtConversionFactor, gbc, 3, 1);
 
-        addLabel(card, "حد الأمان البسيط (أقل كمية):", gbc, 0, 1);
+        addLabel(card, "حد الأمان البسيط (أقل كمية):", gbc, 0, 2);
         txtMinStockLevel = new JTextField("10.0", 10);
-        addComp(card, txtMinStockLevel, gbc, 1, 1);
+        addComp(card, txtMinStockLevel, gbc, 1, 2);
 
-        addLabel(card, "تاريخ الانتهاء (YYYY-MM-DD):", gbc, 2, 1);
+        addLabel(card, "تاريخ الانتهاء (YYYY-MM-DD):", gbc, 2, 2);
         txtExpiryDate = new JTextField("2027-12-31", 10);
-        addComp(card, txtExpiryDate, gbc, 3, 1);
+        addComp(card, txtExpiryDate, gbc, 3, 2);
 
-        addLabel(card, "رقم التشغيلة / الدفعة:", gbc, 0, 2);
+        addLabel(card, "رقم التشغيلة / الدفعة:", gbc, 0, 3);
         txtBatchNo = new JTextField("BATCH-101", 10);
-        addComp(card, txtBatchNo, gbc, 1, 2);
+        addComp(card, txtBatchNo, gbc, 1, 3);
 
-        addLabel(card, "تكلفة الوحدة التقديرية:", gbc, 2, 2);
+        addLabel(card, "تكلفة الوحدة التقديرية:", gbc, 2, 3);
         txtUnitCost = new JTextField("0.0", 10);
-        addComp(card, txtUnitCost, gbc, 3, 2);
+        addComp(card, txtUnitCost, gbc, 3, 3);
 
-        addLabel(card, "سعر البيع الافتراضي:", gbc, 0, 3);
+        addLabel(card, "سعر البيع الافتراضي:", gbc, 0, 4);
         txtDefaultUnitPrice = new JTextField("0.0", 10);
-        gbc.gridx = 1; gbc.gridy = 3; gbc.gridwidth = 3;
+        gbc.gridx = 1; gbc.gridy = 4; gbc.gridwidth = 3;
         card.add(txtDefaultUnitPrice, gbc);
 
         return card;
@@ -387,9 +394,16 @@ public class ItemManagementForm extends JFrame {
         cmbUnitType.addActionListener(e -> {
             if ("WEIGHT (وزني)".equals(cmbUnitType.getSelectedItem())) {
                 cmbUom.setSelectedItem("كيلو");
+                txtSubUom.setText("جرام");
                 txtConversionFactor.setText("1000");
+                txtConversionFactor.setEditable(false);
+                txtConversionFactor.setBackground(new Color(245, 245, 245));
             } else {
+                cmbUom.setSelectedIndex(0);
+                txtSubUom.setText("");
                 txtConversionFactor.setText("1");
+                txtConversionFactor.setEditable(true);
+                txtConversionFactor.setBackground(Color.WHITE);
             }
         });
 
@@ -437,6 +451,9 @@ public class ItemManagementForm extends JFrame {
         cmbUnitType.setSelectedItem("COUNT".equals(unitType) ? "COUNT (عددي)" : "WEIGHT".equals(unitType) ? "WEIGHT (وزني)" : unitType);
         cmbUom.setSelectedItem(item.getUom());
         txtConversionFactor.setText(String.valueOf(item.getConversionFactor()));
+        txtSubUom.setText("WEIGHT".equals(unitType) ? "جرام" : "");
+        txtConversionFactor.setEditable(!"WEIGHT".equals(unitType));
+        txtConversionFactor.setBackground("WEIGHT".equals(unitType) ? new Color(245, 245, 245) : Color.WHITE);
         txtMinStockLevel.setText(String.valueOf(item.getMinStockLevel()));
         txtExpiryDate.setText(item.getExpiryDate());
         txtBatchNo.setText(item.getBatchNo());
