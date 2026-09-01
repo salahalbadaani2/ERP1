@@ -1,8 +1,4 @@
-import java.io.File;
 import java.io.PrintWriter;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.time.LocalDate;
 
 /**
@@ -12,7 +8,7 @@ import java.time.LocalDate;
  * 1. إثبات تخفيض إيراد المبيعات والضريبة وقيد الاستحقاق لحساب العميل.
  * 2. التحقق الجبري عبر حارس الحسابات المركزي (AccountValidator) لمنع القيد على الحسابات الرئيسية.
  * 3. التصدير النصي للسند والقيد المزدوج إلى ملف SalesReturnInvoiceLog.txt.
- * 4. الترحيل والحفظ المباشر في قاعدة البيانات (MySQL) عبر DatabaseManager.
+ * 4. الترحيل عبر SalesPostingService حصراً (Single Transaction).
  */
 public class SalesReturnInvoice {
 
@@ -31,6 +27,35 @@ public class SalesReturnInvoice {
     private double taxRate;               // نسبة الضريبة (0.15 أو 0.05)
     private String returnReason;          // سبب الإرجاع (تالف، منتهي، غير مطابق)
     private String batchNo;               // رقم التشغيلة/الدفعة
+    private java.util.List<ReturnLine> lines = new java.util.ArrayList<>();
+
+    public static class ReturnLine {
+        private final String itemCode;
+        private final double quantity;
+        private final double unitPrice;
+        private final double unitCost;
+        public ReturnLine(String itemCode, double quantity, double unitPrice, double unitCost) {
+            if (itemCode == null || itemCode.trim().isEmpty()) {
+                throw new IllegalArgumentException("خطأ جبري: رقم الصنف مطلوب في سطر المرتجع!");
+            }
+            if (quantity <= 0) {
+                throw new IllegalArgumentException("خطأ جبري: كمية الصنف [" + itemCode + "] يجب أن تكون موجبة!");
+            }
+            if (unitPrice < 0 || unitCost < 0) {
+                throw new IllegalArgumentException("خطأ جبري: سعر/تكلفة الصنف [" + itemCode + "] لا يمكن أن تكون سالبة!");
+            }
+            this.itemCode = itemCode.trim();
+            this.quantity = quantity;
+            this.unitPrice = unitPrice;
+            this.unitCost = unitCost;
+        }
+        public String getItemCode() { return itemCode; }
+        public double getQuantity() { return quantity; }
+        public double getUnitPrice() { return unitPrice; }
+        public double getUnitCost() { return unitCost; }
+        public double getLineAmount() { return quantity * unitPrice; }
+        public double getLineCost() { return quantity * unitCost; }
+    }
 
     public SalesReturnInvoice(String invoiceCode, String originalInvoiceCode, String returnDate,
                               String customerAccount, String salesReturnAccount, String taxAccount,
@@ -46,7 +71,6 @@ public class SalesReturnInvoice {
             throw new IllegalArgumentException("خطأ محاسبي: قيمة المرتجع يجب أن تكون أكبر من الصفر!");
         }
 
-        // 1. التحقق الجبري الأمني من الحسابات الفرعية عبر حارس الحسابات المركزي (مستوى 6)
         AccountValidator.validateSubAccount(customerAccount, "حساب العميل");
         AccountValidator.validateSubAccount(salesReturnAccount, "حساب مردودات ومسموحات المبيعات");
         AccountValidator.validateSubAccount(finishedGoodsAccount, "حساب مخزن المنتجات التامة");
@@ -70,7 +94,52 @@ public class SalesReturnInvoice {
         this.taxRate = isTaxApplied ? taxRate : 0.0;
         this.returnReason = (returnReason != null) ? returnReason : "غير محدد";
         this.batchNo = (batchNo != null) ? batchNo : "---";
+        // ضمان عدم ترك القائمة فارغة للتوافق مع النماذج الأخرى
+        this.lines.add(new ReturnLine("ITEM-DEFAULT", 1, returnAmount, inventoryCost));
     }
+
+    public SalesReturnInvoice(String invoiceCode, String originalInvoiceCode, String returnDate,
+                              String customerAccount, String salesReturnAccount, String taxAccount,
+                              String finishedGoodsAccount, String cogsAccount,
+                              boolean isTaxApplied, double taxRate,
+                              String returnReason, String batchNo,
+                              java.util.List<ReturnLine> lines) {
+        if (invoiceCode == null || invoiceCode.trim().isEmpty()) {
+            throw new IllegalArgumentException("خطأ أمني: رقم فاتورة مردودات المبيعات مطلوب!");
+        }
+        if (lines == null || lines.isEmpty()) {
+            throw new IllegalArgumentException("خطأ محاسبي: يجب إضافة صنف واحد على الأقل!");
+        }
+        double total = 0;
+        double totalCost = 0;
+        for (ReturnLine l : lines) total += l.getLineAmount();
+        for (ReturnLine l : lines) totalCost += l.getLineCost();
+        if (total <= 0) throw new IllegalArgumentException("خطأ محاسبي: قيمة المرتجع يجب أن تكون أكبر من الصفر!");
+        AccountValidator.validateSubAccount(customerAccount, "حساب العميل");
+        AccountValidator.validateSubAccount(salesReturnAccount, "حساب مردودات ومسموحات المبيعات");
+        AccountValidator.validateSubAccount(finishedGoodsAccount, "حساب مخزن المنتجات التامة");
+        AccountValidator.validateSubAccount(cogsAccount, "حساب تكلفة البضاعة المباعة (COGS)");
+        if (isTaxApplied) {
+            AccountValidator.validateSubAccount(taxAccount, "حساب ضريبة المبيعات والقيمة المضافة");
+        }
+        this.invoiceCode = invoiceCode;
+        this.originalInvoiceCode = (originalInvoiceCode != null && !originalInvoiceCode.trim().isEmpty()) ? originalInvoiceCode : "مباشر بدون فاتورة";
+        this.returnDate = (returnDate != null && !returnDate.trim().isEmpty()) ? returnDate : LocalDate.now().toString();
+        this.customerAccount = customerAccount;
+        this.salesReturnAccount = salesReturnAccount;
+        this.taxAccount = taxAccount;
+        this.finishedGoodsAccount = finishedGoodsAccount;
+        this.cogsAccount = cogsAccount;
+        this.returnAmount = total;
+        this.inventoryCost = totalCost;
+        this.isTaxApplied = isTaxApplied;
+        this.taxRate = isTaxApplied ? taxRate : 0.0;
+        this.returnReason = (returnReason != null) ? returnReason : "غير محدد";
+        this.batchNo = (batchNo != null) ? batchNo : "---";
+        this.lines = new java.util.ArrayList<>(lines);
+    }
+
+    public java.util.List<ReturnLine> getLines() { return java.util.Collections.unmodifiableList(lines); }
 
     public double getTaxAmount() {
         return isTaxApplied ? (returnAmount * taxRate) : 0.0;
@@ -96,6 +165,10 @@ public class SalesReturnInvoice {
     public String getReturnReason() { return returnReason; }
     public String getBatchNo() { return batchNo; }
 
+    public boolean postToAccounting() {
+        return SalesPostingService.postSalesReturn(this);
+    }
+
     /**
      * تصدير فاتورة المردودات والقيدين المحاسبيين المزدوجين إلى الملف النصي SalesReturnInvoiceLog.txt
      */
@@ -115,6 +188,10 @@ public class SalesReturnInvoice {
             writer.println("إجمالي المستحق لحساب العميل: " + getTotalCustomerCredit() + " YER");
             writer.println("التكلفة المخزنية المستردة (COGS Reversal): " + inventoryCost + " YER");
             writer.println("سبب المرتجع: " + returnReason + " | رقم التشغيلة: " + batchNo);
+            writer.println("--- تفاصيل الأصناف المرتجعة ---");
+            for (ReturnLine l : lines) {
+                writer.println("  * رمز الصنف: " + l.getItemCode() + " | الكمية: " + l.getQuantity() + " | سعر الوحدة: " + l.getUnitPrice() + " | التكلفة: " + l.getUnitCost() + " | إجمالي السطر: " + l.getLineAmount() + " | تكلفة السطر: " + l.getLineCost());
+            }
             writer.println("----------------------------------------");
             writer.println("   1. القيد المالي لتخفيض الإيراد والذمم: ");
             if (isTaxApplied && getTaxAmount() > 0) {
@@ -139,53 +216,19 @@ public class SalesReturnInvoice {
     }
 
     /**
-     * حفظ الفاتورة مباشرة في قاعدة بيانات MySQL عبر DatabaseManager
-     */
-    public void saveToDatabase() {
-        try {
-            DatabaseManager.insertSalesReturnNote(
-                invoiceCode,
-                customerAccount,
-                salesReturnAccount,
-                finishedGoodsAccount,
-                cogsAccount,
-                getTotalCustomerCredit()
-            );
-            System.out.println("Success: Sales Return Invoice saved to MySQL Database.");
-        } catch (Exception e) {
-            System.err.println("Error saving Sales Return Invoice to DB: " + e.getMessage());
-        }
-    }
-
-    /**
-     * حفظ الفاتورة باستخدام اتصال موحد مُمرَّر من الخارج.
-     */
-    public void saveToDatabase(Connection conn) {
-        String sql = "INSERT INTO sales_return_notes (return_code, customer_account, sales_return_account, finished_goods_account, cogs_account, total_amount) VALUES (?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, invoiceCode);
-            pstmt.setString(2, customerAccount);
-            pstmt.setString(3, salesReturnAccount);
-            pstmt.setString(4, finishedGoodsAccount);
-            pstmt.setString(5, cogsAccount);
-            pstmt.setDouble(6, getTotalCustomerCredit());
-            pstmt.executeUpdate();
-            System.out.println("Success: Sales Return Invoice saved to MySQL Database.");
-        } catch (SQLException e) {
-            System.err.println("Error saving Sales Return Invoice to DB: " + e.getMessage());
-        }
-    }
-
-    /**
      * الدالة الرئيسية (main) لتشغيل واختبار فاتورة مردودات المبيعات ذاتياً من الطرفية Terminal
      */
     public static void main(String[] args) {
         System.out.println("==========================================");
-        System.out.println("=== نظام ERP المتقدم - تجربة المردودات ===");
+        System.out.println("=== نظام ERP المتقدم - تجربة المردودات متعددة الأصناف ===");
         System.out.println("==========================================");
 
         try {
-            // إنشاء نموذج فاتورة مردودات تجريبية
+            java.util.List<ReturnLine> lines = new java.util.ArrayList<>();
+            lines.add(new ReturnLine("ITEM-101", 2, 250.00, 180.00));
+            lines.add(new ReturnLine("ITEM-102", 3, 180.00, 120.00));
+            lines.add(new ReturnLine("ITEM-103", 5, 80.00, 50.00));
+
             SalesReturnInvoice invoice = new SalesReturnInvoice(
                 "SRI-1001",
                 "INV_1001",
@@ -195,23 +238,24 @@ public class SalesReturnInvoice {
                 "220301",
                 "1210301",
                 "510101",
-                250.00,
-                180.00,
                 true,
                 0.15,
                 "تلف أثناء النقل والتخزين",
-                "BATCH-2026-08"
+                "BATCH-2026-08",
+                lines
             );
 
             System.out.println("تم إنشاء الفاتورة: " + invoice.getInvoiceCode());
+            System.out.println(" - عدد الأسطر: " + invoice.getLines().size());
+            for (ReturnLine l : invoice.getLines()) {
+                System.out.println("   * " + l.getItemCode() + " | qty=" + l.getQuantity() + " | price=" + l.getUnitPrice() + " | cost=" + l.getUnitCost() + " | amount=" + l.getLineAmount());
+            }
             System.out.println(" - قيمة المرتجع: " + invoice.getReturnAmount() + " YER");
             System.out.println(" - مبلغ الضريبة (15%): " + invoice.getTaxAmount() + " YER");
             System.out.println(" - إجمالي المستحق للعميل: " + invoice.getTotalCustomerCredit() + " YER");
             System.out.println(" - تكلفة المخزون المستردة: " + invoice.getInventoryCost() + " YER");
 
-            // تصدير إلى الملف النصي
             invoice.exportToTextFile();
-
             System.out.println("\nتمت العملية بنجاح.");
         } catch (Exception ex) {
             System.err.println("خطأ أثناء التنفيذ: " + ex.getMessage());

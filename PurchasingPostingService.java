@@ -33,11 +33,24 @@ public final class PurchasingPostingService {
     /**
      * ترحيل فاتورة مشتريات باستخدام اتصال موحد مُمرَّر من الخارج.
      * يفترض أن الاتصال تم فتحه بـ setAutoCommit(false) من الخارج.
+     * يدعم كافة أسطر الجدول عبر قائمة invoice.getLines()
      */
     public static boolean postPurchase(Connection conn, PurchaseInvoice invoice) {
         try {
-            requireInventoryData(invoice.getItemCode(), invoice.getQuantity(), invoice.getUnitCost());
-            requireAmountMatchesQuantity(invoice.getAmount(), invoice.getQuantity(), invoice.getUnitCost());
+            java.util.List<PurchaseInvoice.PurchaseLine> lines = invoice.getLines();
+            if (lines != null && !lines.isEmpty()) {
+                double sum = 0;
+                for (PurchaseInvoice.PurchaseLine l : lines) {
+                    requireInventoryData(l.getItemCode(), l.getQuantity(), l.getUnitCost());
+                    sum += l.getLineAmount();
+                }
+                if (Math.abs(sum - invoice.getAmount()) > 0.01) {
+                    throw new IllegalArgumentException("إجمالي الفاتورة لا يطابق مجموع أسطر الأصناف.");
+                }
+            } else {
+                requireInventoryData(invoice.getItemCode(), invoice.getQuantity(), invoice.getUnitCost());
+                requireAmountMatchesQuantity(invoice.getAmount(), invoice.getQuantity(), invoice.getUnitCost());
+            }
 
             JournalEntry entry = new JournalEntry("JV-PUR-" + invoice.getInvoiceCode(), invoice.getInvoiceCode(),
                     "INVENTORY", "إثبات شراء مواد خام من المورد: " + invoice.getInvoiceCode());
@@ -53,10 +66,19 @@ public final class PurchasingPostingService {
             // ترحيل القيد اليومي + حفظ المستند + حركة المخزون داخل اتصال واحد
             return PostingEngine.postJournalEntry(conn, entry, connection -> {
                 savePurchase(connection, invoice);
-                InventoryPostingService.receiveInTransaction(connection, invoice.getInvoiceCode(),
-                        invoice.getItemCode(), invoice.getItemCode(), invoice.getQuantity(),
-                        invoice.getUnitCost(), invoice.getGrirAccount(), invoice.getVendorAccount(),
-                        "", "", "استلام مشتريات");
+                if (lines != null && !lines.isEmpty()) {
+                    for (PurchaseInvoice.PurchaseLine l : lines) {
+                        InventoryPostingService.receiveInTransaction(connection, invoice.getInvoiceCode(),
+                                l.getItemCode(), l.getItemCode(), l.getQuantity(),
+                                l.getUnitCost(), invoice.getGrirAccount(), invoice.getVendorAccount(),
+                                "", "", "استلام مشتريات");
+                    }
+                } else {
+                    InventoryPostingService.receiveInTransaction(connection, invoice.getInvoiceCode(),
+                            invoice.getItemCode(), invoice.getItemCode(), invoice.getQuantity(),
+                            invoice.getUnitCost(), invoice.getGrirAccount(), invoice.getVendorAccount(),
+                            "", "", "استلام مشتريات");
+                }
             });
         } catch (Exception e) {
             try { conn.rollback(); } catch (Exception ignored) {}
@@ -89,11 +111,24 @@ public final class PurchasingPostingService {
 
     /**
      * ترحيل مردود مشتريات باستخدام اتصال موحد مُمرَّر من الخارج.
+     * يدعم كافة أسطر الجدول عبر قائمة invoice.getLines()
      */
     public static boolean postPurchaseReturn(Connection conn, PurchaseReturnInvoice invoice) {
         try {
-            requireInventoryData(invoice.getItemCode(), invoice.getQuantity(), invoice.getUnitCost());
-            requireAmountMatchesQuantity(invoice.getReturnAmount(), invoice.getQuantity(), invoice.getUnitCost());
+            java.util.List<PurchaseReturnInvoice.ReturnLine> lines = invoice.getLines();
+            if (lines != null && !lines.isEmpty()) {
+                double sum = 0;
+                for (PurchaseReturnInvoice.ReturnLine l : lines) {
+                    requireInventoryData(l.getItemCode(), l.getQuantity(), l.getUnitCost());
+                    sum += l.getLineAmount();
+                }
+                if (Math.abs(sum - invoice.getReturnAmount()) > 0.01) {
+                    throw new IllegalArgumentException("إجمالي المرتجع لا يطابق مجموع أسطر الأصناف.");
+                }
+            } else {
+                requireInventoryData(invoice.getItemCode(), invoice.getQuantity(), invoice.getUnitCost());
+                requireAmountMatchesQuantity(invoice.getReturnAmount(), invoice.getQuantity(), invoice.getUnitCost());
+            }
 
             JournalEntry entry = new JournalEntry("JV-PR-" + invoice.getInvoiceCode(), invoice.getInvoiceCode(),
                     "INVENTORY", "إثبات مردود مواد خام إلى المورد: " + invoice.getInvoiceCode());
@@ -108,10 +143,19 @@ public final class PurchasingPostingService {
 
             return PostingEngine.postJournalEntry(conn, entry, connection -> {
                 savePurchaseReturn(connection, invoice);
-                InventoryPostingService.issueInTransaction(connection, invoice.getInvoiceCode(),
-                        invoice.getItemCode(), invoice.getItemCode(), invoice.getQuantity(),
-                        invoice.getUnitCost(), invoice.getGrirAccount(), invoice.getVendorAccount(),
-                        "", "", "صرف مردود مشتريات");
+                if (lines != null && !lines.isEmpty()) {
+                    for (PurchaseReturnInvoice.ReturnLine l : lines) {
+                        InventoryPostingService.issueInTransaction(connection, invoice.getInvoiceCode(),
+                                l.getItemCode(), l.getItemCode(), l.getQuantity(),
+                                l.getUnitCost(), invoice.getVendorAccount(), invoice.getGrirAccount(),
+                                "", "", "صرف مردود مشتريات");
+                    }
+                } else {
+                    InventoryPostingService.issueInTransaction(connection, invoice.getInvoiceCode(),
+                            invoice.getItemCode(), invoice.getItemCode(), invoice.getQuantity(),
+                            invoice.getUnitCost(), invoice.getVendorAccount(), invoice.getGrirAccount(),
+                            "", "", "صرف مردود مشتريات");
+                }
             });
         } catch (Exception e) {
             try { conn.rollback(); } catch (Exception ignored) {}

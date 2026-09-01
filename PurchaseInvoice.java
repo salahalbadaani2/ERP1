@@ -1,5 +1,8 @@
 import java.io.File;
 import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class PurchaseInvoice {
     private String invoiceCode;        // رقم فاتورة المشتريات (PINV-1001)
@@ -12,6 +15,22 @@ public class PurchaseInvoice {
     private String itemCode;
     private double quantity;
     private double unitCost;
+    private List<PurchaseLine> lines = new ArrayList<>();
+
+    public static class PurchaseLine {
+        private final String itemCode;
+        private final double quantity;
+        private final double unitCost;
+        public PurchaseLine(String itemCode, double quantity, double unitCost) {
+            this.itemCode = itemCode;
+            this.quantity = quantity;
+            this.unitCost = unitCost;
+        }
+        public String getItemCode() { return itemCode; }
+        public double getQuantity() { return quantity; }
+        public double getUnitCost() { return unitCost; }
+        public double getLineAmount() { return quantity * unitCost; }
+    }
 
     public PurchaseInvoice(String invoiceCode, String grirAccount, String vendorAccount, 
                            String inputTaxAccount, double amount, boolean isTaxApplied, double taxRate) {
@@ -46,6 +65,41 @@ public class PurchaseInvoice {
         this.itemCode = itemCode;
         this.quantity = quantity;
         this.unitCost = unitCost;
+        if (itemCode != null && !itemCode.trim().isEmpty() && quantity > 0) {
+            this.lines.add(new PurchaseLine(itemCode, quantity, unitCost));
+        }
+    }
+
+    public PurchaseInvoice(String invoiceCode, String grirAccount, String vendorAccount,
+                           String inputTaxAccount, boolean isTaxApplied, double taxRate,
+                           List<PurchaseLine> lines) {
+        if (invoiceCode == null || invoiceCode.trim().isEmpty()) {
+            throw new IllegalArgumentException("خطأ أمني: رقم فاتورة المشتريات مطلوب!");
+        }
+        if (lines == null || lines.isEmpty()) {
+            throw new IllegalArgumentException("خطأ محاسبي: يجب إضافة صنف واحد على الأقل!");
+        }
+        double total = 0;
+        for (PurchaseLine l : lines) total += l.getLineAmount();
+        if (total <= 0) throw new IllegalArgumentException("خطأ محاسبي: مبلغ الفاتورة يجب أن يكون أكبر من الصفر!");
+
+        AccountValidator.validateSubAccount(grirAccount, "حساب وسيط استلام البضائع GR/IR");
+        AccountValidator.validateSubAccount(vendorAccount, "حساب المورد الفعلي");
+        if (isTaxApplied) {
+            AccountValidator.validateSubAccount(inputTaxAccount, "حساب ضريبة المشتريات");
+        }
+        this.invoiceCode = invoiceCode;
+        this.grirAccount = grirAccount;
+        this.vendorAccount = vendorAccount;
+        this.inputTaxAccount = inputTaxAccount;
+        this.amount = total;
+        this.isTaxApplied = isTaxApplied;
+        this.taxRate = isTaxApplied ? taxRate : 0.0;
+        this.lines = new ArrayList<>(lines);
+        PurchaseLine first = lines.get(0);
+        this.itemCode = first.getItemCode();
+        this.quantity = first.getQuantity();
+        this.unitCost = first.getUnitCost();
     }
 
     public double getTaxAmount() {
@@ -66,6 +120,7 @@ public class PurchaseInvoice {
     public String getItemCode() { return itemCode; }
     public double getQuantity() { return quantity; }
     public double getUnitCost() { return unitCost; }
+    public List<PurchaseLine> getLines() { return Collections.unmodifiableList(lines); }
 
     public boolean postToAccounting() {
         return PurchasingPostingService.postPurchase(this);

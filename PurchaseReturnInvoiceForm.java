@@ -1,133 +1,198 @@
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellEditor;
 import java.awt.*;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.Vector;
 
 public class PurchaseReturnInvoiceForm extends JFrame {
     private final JTextField returnNumber = new JTextField();
     private final JTextField returnDate = new JTextField(LocalDate.now().toString());
-    private final JTextField inventoryAccount = new JTextField("1210101");
-    private final JTextField supplierAccount = new JTextField("210101");
-    private final JTextField inputTaxAccount = new JTextField("220301");
-    private final JTextField itemCode = new JTextField("ITEM-101");
-    private final JTextField quantity = new JTextField("1");
-    private final JTextField kgField = new JTextField("0");
-    private final JTextField gramField = new JTextField("0");
-    private final JTextField unitCost = new JTextField("180");
-    private final JTextField amount = new JTextField("180");
-    private final JCheckBox taxApplied = new JCheckBox("عكس ضريبة المدخلات", false);
-    private final JTextField taxRate = new JTextField("0.15");
-    private final JComboBox<String> unitTypeCombo = new JComboBox<>(new String[]{"COUNT", "WEIGHT"});
+    private final JTextField supplierAccount = new JTextField();
+    private JCheckBox chkApplyTax = new JCheckBox("تطبيق الضريبة");
+    private JTextField txtTaxRate = new JTextField("0.15");
+    private DefaultTableModel tableModel;
+    private JTable itemTable;
+    private final JTextField totalField = new JTextField("0.00");
+    private final JTextField taxAmountField = new JTextField("0.00");
+    private final JTextField grandTotalField = new JTextField("0.00");
+
+    private static final String[] COLUMNS = {"م", "نوع المخزون", "اسم الصنف", "رقم الصنف", "نوع الوحدة", "الكمية", "الجرام", "سعر الوحدة", "الإجمالي"};
 
     public PurchaseReturnInvoiceForm() {
         setTitle("نظام ERP المصنعي - مردود المشتريات");
-        setSize(760, 520);
-        setMinimumSize(new Dimension(620, 420));
+        setSize(1300, 800);
+        setMinimumSize(new Dimension(1100, 650));
         setResizable(true);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         returnNumber.setText(DocumentNumberService.next("PURCHASE_RETURN", "PRI-"));
         returnNumber.setEditable(false);
+        initUI();
+        installAutoComplete();
+    }
 
-        JPanel form = new JPanel(new GridLayout(0, 2, 10, 10));
-        form.setBorder(BorderFactory.createEmptyBorder(20, 25, 10, 25));
-        addRow(form, "رقم المرتجع", returnNumber);
-        addRow(form, "التاريخ", returnDate);
-        addRow(form, "حساب مخزون المواد الخام", accountField(inventoryAccount, "121"));
-        addRow(form, "حساب المورد", accountField(supplierAccount, "21"));
-        addRow(form, "حساب ضريبة المدخلات", accountField(inputTaxAccount, "22"));
-        addRow(form, "رقم الصنف", itemCode);
-        addRow(form, "نوع الصنف", unitTypeCombo);
-        JPanel qtyPanel = new JPanel(new GridLayout(1, 3, 5, 5));
-        qtyPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        qtyPanel.add(new JLabel("الكمية (كرتون/عدد):"));
-        qtyPanel.add(quantity);
-        qtyPanel.add(new JLabel("كجم / غرام"));
-        JPanel weightPanel = new JPanel(new GridLayout(1, 4, 5, 5));
-        weightPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        weightPanel.add(new JLabel("الكيلو:"));
-        weightPanel.add(kgField);
-        weightPanel.add(new JLabel("الجرام:"));
-        weightPanel.add(gramField);
-        addRow(form, "الكمية العددية/الكرتون", qtyPanel);
-        addRow(form, "الأوزان (للأصناف الوزنية)", weightPanel);
-        addRow(form, "تكلفة الوحدة", unitCost);
-        addRow(form, "قيمة المرتجع قبل الضريبة", amount);
-        addRow(form, "عكس الضريبة", taxApplied);
-        addRow(form, "نسبة الضريبة", taxRate);
+    private void initUI() {
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton approve = new JButton("موافق واعتماد");
-        JButton view = new JButton("عرض وطباعة");
-        JButton clear = new JButton("مستند جديد");
-        JButton close = new JButton("إغلاق");
-        approve.addActionListener(event -> post());
-        view.addActionListener(event -> preview());
-        clear.addActionListener(event -> reset());
-        close.addActionListener(event -> dispose());
+        JPanel headerPanel = new JPanel(new GridLayout(0, 2, 10, 10));
+        headerPanel.setBorder(BorderFactory.createTitledBorder("بيانات مردود المشتريات"));
+        headerPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        headerPanel.add(new JLabel("رقم المرتجع:"));
+        headerPanel.add(returnNumber);
+        headerPanel.add(new JLabel("التاريخ:"));
+        headerPanel.add(returnDate);
+        headerPanel.add(new JLabel("حساب المورد:"));
+        headerPanel.add(accountField(supplierAccount, "21"));
+
+        JPanel taxPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
+        taxPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        chkApplyTax.setSelected(false);
+        txtTaxRate.setEnabled(false);
+        chkApplyTax.addActionListener(e -> txtTaxRate.setEnabled(chkApplyTax.isSelected()));
+        taxPanel.add(chkApplyTax);
+        taxPanel.add(new JLabel("النسبة:"));
+        taxPanel.add(txtTaxRate);
+        headerPanel.add(new JLabel("احتساب الضريبة:"));
+        headerPanel.add(taxPanel);
+
+        JPanel tablePanel = new JPanel(new BorderLayout(10, 10));
+        tablePanel.setBorder(BorderFactory.createTitledBorder("جدول الأصناف"));
+        tablePanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        tableModel = new DefaultTableModel(COLUMNS, 0) {
+            @Override public Class<?> getColumnClass(int column) { return String.class; }
+            @Override public boolean isCellEditable(int row, int column) { return column>=1 && column<=8; }
+        };
+        itemTable = new JTable(tableModel) {
+            @Override public TableCellEditor getCellEditor(int row, int column) {
+                if (column==4) return new DefaultCellEditor(new JComboBox<>(new String[]{"COUNT","WEIGHT"}));
+                return super.getCellEditor(row, column);
+            }
+        };
+        itemTable.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        itemTable.setFont(new Font("Tahoma", Font.PLAIN, 12));
+        itemTable.setRowHeight(25);
+        itemTable.getModel().addTableModelListener(e -> calculateRowTotals());
+        itemTable.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount()==2) {
+                    int row=itemTable.getSelectedRow(); int col=itemTable.getSelectedColumn();
+                    if (col==2 || col==3) {
+                        AccountTreeDialog dlg=new AccountTreeDialog(PurchaseReturnInvoiceForm.this, "121");
+                        dlg.setVisible(true);
+                        if (dlg.isAccountSelected()) {
+                            String code=dlg.getSelectedAccountCode();
+                            String sql="SELECT item_code, item_name, unit_type FROM inventory_items WHERE inventory_account=? LIMIT 1";
+                            try (Connection conn=DatabaseManager.getConnection(); PreparedStatement ps=conn.prepareStatement(sql)){
+                                ps.setString(1,code);
+                                try(ResultSet rs=ps.executeQuery()){ if(rs.next()){
+                                    tableModel.setValueAt(rs.getString("item_name"),row,2);
+                                    tableModel.setValueAt(rs.getString("item_code"),row,3);
+                                    tableModel.setValueAt(rs.getString("unit_type"),row,4);
+                                } else tableModel.setValueAt(code,row,3);}
+                            } catch(Exception ignored){}
+                        }
+                    }
+                }
+            }
+        });
+        JScrollPane sp=new JScrollPane(itemTable);
+        tablePanel.add(sp, BorderLayout.CENTER);
+        JPanel tableButtons=new JPanel(new FlowLayout(FlowLayout.LEFT,10,5));
+        tableButtons.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        JButton addRowBtn=new JButton("إضافة سطر");
+        JButton removeRowBtn=new JButton("حذف السطر المحدد");
+        addRowBtn.addActionListener(e->{addTableRow(); renumberRows();});
+        removeRowBtn.addActionListener(e->removeSelectedRow());
+        tableButtons.add(addRowBtn); tableButtons.add(removeRowBtn);
+        tablePanel.add(tableButtons, BorderLayout.SOUTH);
+
+        JPanel bottomPanel=new JPanel(new GridLayout(0,3,10,10));
+        bottomPanel.setBorder(BorderFactory.createTitledBorder("المبالغ الإجمالية"));
+        bottomPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        bottomPanel.add(new JLabel("الإجمالي الكلي:")); totalField.setEditable(false); totalField.setFont(new Font("Tahoma",Font.BOLD,14)); totalField.setHorizontalAlignment(SwingConstants.RIGHT); bottomPanel.add(totalField);
+        bottomPanel.add(new JLabel("الإجمالي مع الضريبة:")); grandTotalField.setEditable(false); grandTotalField.setFont(new Font("Tahoma",Font.BOLD,14)); grandTotalField.setHorizontalAlignment(SwingConstants.RIGHT); bottomPanel.add(grandTotalField);
+
+        mainPanel.add(headerPanel, BorderLayout.NORTH);
+        mainPanel.add(tablePanel, BorderLayout.CENTER);
+        mainPanel.add(bottomPanel, BorderLayout.SOUTH);
+
+        JPanel actions=new JPanel(new FlowLayout(FlowLayout.RIGHT,15,8));
+        JButton approve=new JButton("موافق واعتماد");
+        JButton view=new JButton("عرض وطباعة");
+        JButton clear=new JButton("مستند جديد");
+        JButton close=new JButton("إغلاق");
+        approve.addActionListener(e->post()); view.addActionListener(e->preview()); clear.addActionListener(e->reset()); close.addActionListener(e->dispose());
         actions.add(approve); actions.add(view); actions.add(clear); actions.add(close);
-        add(new JScrollPane(form), BorderLayout.CENTER);
+        add(mainPanel, BorderLayout.CENTER);
         add(actions, BorderLayout.SOUTH);
     }
 
-    private void addRow(JPanel panel, String label, Component field) {
-        panel.add(new JLabel(label + ":"));
-        panel.add(field);
+    private void installAutoComplete(){ AutoCompleteHelper.installAccountAutoComplete(supplierAccount, "LIABILITY"); }
+    private void addTableRow(){ int row=tableModel.getRowCount(); Vector<String> r=new Vector<>(); r.add(String.valueOf(row+1)); r.add(""); r.add(""); r.add(""); r.add("COUNT"); r.add(""); r.add(""); r.add(""); r.add("0.00"); tableModel.addRow(r); }
+    private void removeSelectedRow(){ int r=itemTable.getSelectedRow(); if(r>=0){ tableModel.removeRow(r); renumberRows(); calculateRowTotals(); } }
+    private void renumberRows(){ for(int i=0;i<tableModel.getRowCount();i++) tableModel.setValueAt(String.valueOf(i+1),i,0); }
+    private void calculateRowTotals(){
+        double total=0.0;
+        for(int i=0;i<tableModel.getRowCount();i++){
+            try{ double qty=parseDoubleSafe(tableModel.getValueAt(i,5)); double gram=parseDoubleSafe(tableModel.getValueAt(i,6)); double price=parseDoubleSafe(tableModel.getValueAt(i,7)); String ut=(String)tableModel.getValueAt(i,4); if("WEIGHT".equals(ut)) qty=qty+(gram/1000.0); double v=qty*price; tableModel.setValueAt(String.format("%,.2f",v),i,8); total+=v; }catch(Exception ignored){}
+        }
+        totalField.setText(String.format("%,.2f",total));
+        double rate=parseDoubleSafe(txtTaxRate.getText()); double tax=chkApplyTax.isSelected()?total*rate:0.0;
+        taxAmountField.setText(String.format("%,.2f",tax)); grandTotalField.setText(String.format("%,.2f",total+tax));
     }
-
-    private JPanel accountField(JTextField field, String prefix) {
-        JPanel wrapper = new JPanel(new BorderLayout(5, 0));
-        JButton browse = new JButton("شجرة الحسابات");
-        browse.addActionListener(event -> {
-            AccountTreeDialog dialog = new AccountTreeDialog(this, prefix);
-            dialog.setVisible(true);
-            if (dialog.isAccountSelected()) field.setText(dialog.getSelectedAccountCode());
-        });
-        wrapper.add(field, BorderLayout.CENTER);
-        wrapper.add(browse, BorderLayout.WEST);
-        return wrapper;
+    private double parseDoubleSafe(Object v){ if(v==null) return 0.0; try{return Double.parseDouble(v.toString().trim().replace(",",""));}catch(Exception e){return 0.0;}}
+    private JPanel accountField(JTextField field, String prefix){
+        JPanel w=new JPanel(new BorderLayout(5,0)); w.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        JButton browse=new JButton("شجرة الحسابات");
+        browse.addActionListener(e->{ AccountTreeDialog d=new AccountTreeDialog(this,prefix); d.setVisible(true); if(d.isAccountSelected()){ field.setText(d.getSelectedAccountCode()); if(tableModel.getRowCount()==0) addTableRow(); }});
+        w.add(field,BorderLayout.CENTER); w.add(browse,BorderLayout.EAST); return w;
     }
-
-    private void post() {
-        try {
-            double base = Double.parseDouble(amount.getText().trim());
-            double rate = Double.parseDouble(taxRate.getText().trim());
-            String item = itemCode.getText().trim();
-            double qty;
-            if ("WEIGHT".equals(unitTypeCombo.getSelectedItem())) {
-                double kg = Double.parseDouble(kgField.getText().trim());
-                double g = Double.parseDouble(gramField.getText().trim());
-                qty = kg + (g / 1000.0);
-            } else {
-                qty = Double.parseDouble(quantity.getText().trim());
+    private void post(){
+        try{
+            if(tableModel.getRowCount()==0) throw new IllegalArgumentException("يجب إضافة صنف واحد على الأقل في الجدول.");
+            double total=parseDoubleSafe(totalField.getText());
+            if(total<=0) throw new IllegalArgumentException("قيمة المرتجع يجب أن تكون أكبر من الصفر");
+            String supplierAcc=supplierAccount.getText().trim().split(" - ")[0].trim();
+            AccountResolver.requireAccount("المورد", supplierAcc);
+            boolean taxApplied=chkApplyTax.isSelected();
+            double taxRate=parseDoubleSafe(txtTaxRate.getText());
+            String inventoryAcc, taxAcc;
+            java.util.List<PurchaseReturnInvoice.ReturnLine> lines=new java.util.ArrayList<>();
+            for(int i=0;i<tableModel.getRowCount();i++){
+                String ic=tableModel.getValueAt(i,3).toString().trim().split(" - ")[0].trim();
+                if(ic==null || ic.isEmpty()) throw new IllegalArgumentException("رقم الصنف مطلوب في السطر "+(i+1));
+                String ut=(String)tableModel.getValueAt(i,4);
+                double q=parseDoubleSafe(tableModel.getValueAt(i,5));
+                double g=parseDoubleSafe(tableModel.getValueAt(i,6));
+                if("WEIGHT".equals(ut)) q=q+(g/1000.0);
+                double uc=parseDoubleSafe(tableModel.getValueAt(i,7));
+                if(q<=0 || uc<=0) throw new IllegalArgumentException("الكمية وسعر الوحدة موجبان في السطر "+(i+1));
+                lines.add(new PurchaseReturnInvoice.ReturnLine(ic, q, uc));
             }
-            PurchaseReturnInvoice invoice = new PurchaseReturnInvoice(returnNumber.getText(), supplierAccount.getText().trim(),
-                    inventoryAccount.getText().trim(), inputTaxAccount.getText().trim(), base, taxApplied.isSelected(), rate,
-                    item, qty, Double.parseDouble(unitCost.getText().trim()));
-            if (!invoice.postToAccounting()) throw new IllegalStateException("تعذر اعتماد مردود المشتريات.");
+            String firstItemCode=lines.get(0).getItemCode();
+            try(Connection conn=DatabaseManager.getConnection()){
+                inventoryAcc=AccountResolver.resolveRawMaterialAccount(conn, firstItemCode);
+                AccountResolver.requireAccount("مخزون المواد الخام", inventoryAcc);
+                taxAcc = taxApplied ? AccountResolver.resolveInputTaxAccount(conn) : null;
+                if(taxApplied) AccountResolver.requireAccount("الضريبة", taxAcc);
+            }
+            PurchaseReturnInvoice invoice=new PurchaseReturnInvoice(returnNumber.getText().trim(), supplierAcc, inventoryAcc, taxAcc, taxApplied, taxRate, lines);
+            if(!invoice.postToAccounting()) throw new IllegalStateException("تعذر اعتماد مردود المشتريات.");
             JOptionPane.showMessageDialog(this, "تم اعتماد المرتجع وتخفيض رصيد المورد والمخزون.", "نجاح", JOptionPane.INFORMATION_MESSAGE);
             reset();
-        } catch (Exception exception) {
-            JOptionPane.showMessageDialog(this, exception.getMessage(), "خطأ في مردود المشتريات", JOptionPane.ERROR_MESSAGE);
-        }
+        }catch(Exception ex){ JOptionPane.showMessageDialog(this, ex.getMessage(), "خطأ في مردود المشتريات", JOptionPane.ERROR_MESSAGE); }
     }
-
-    private void preview() {
-        String html = "<h2>مردود مشتريات</h2><p>رقم المستند: " + returnNumber.getText()
-                + "</p><p>التاريخ: " + returnDate.getText() + "</p><p>حساب المورد: " + supplierAccount.getText()
-                + "</p><p>قيمة المرتجع: " + amount.getText() + "</p><p>التوقيع: ____________________</p>";
+    private void preview(){
+        StringBuilder rows=new StringBuilder();
+        for(int i=0;i<tableModel.getRowCount();i++) rows.append("<tr><td>").append(i+1).append("</td><td>").append(tableModel.getValueAt(i,1)).append("</td><td>").append(tableModel.getValueAt(i,2)).append("</td><td>").append(tableModel.getValueAt(i,3)).append("</td><td>").append(tableModel.getValueAt(i,4)).append("</td><td>").append(tableModel.getValueAt(i,5)).append("</td><td>").append(tableModel.getValueAt(i,6)).append("</td><td>").append(tableModel.getValueAt(i,7)).append("</td><td>").append(tableModel.getValueAt(i,8)).append("</td></tr>");
+        String html="<html dir='rtl'><head><meta charset='UTF-8'><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:6px}th{background:#1f2937;color:white}</style></head><body><h2>مردود مشتريات</h2><p>رقم المستند: "+returnNumber.getText()+"</p><p>المورد: "+supplierAccount.getText()+"</p><table><thead><tr><th>م</th><th>نوع المخزون</th><th>اسم الصنف</th><th>رقم الصنف</th><th>نوع الوحدة</th><th>الكمية</th><th>الجرام</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>"+rows.toString()+"</tbody><tfoot><tr><td colspan='8'>الإجمالي</td><td>"+totalField.getText()+"</td></tr></tfoot></table></body></html>";
         new DocumentPreviewDialog(this, "مردود المشتريات", html).setVisible(true);
     }
-
-    private void reset() {
-        returnNumber.setText(DocumentNumberService.next("PURCHASE_RETURN", "PRI-"));
-        amount.setText("0");
-        kgField.setText("0");
-        gramField.setText("0");
-        taxApplied.setSelected(false);
-    }
+    private void reset(){ returnNumber.setText(DocumentNumberService.next("PURCHASE_RETURN","PRI-")); supplierAccount.setText(""); chkApplyTax.setSelected(false); txtTaxRate.setText("0.15"); txtTaxRate.setEnabled(false); while(tableModel.getRowCount()>0) tableModel.removeRow(0); totalField.setText("0.00"); grandTotalField.setText("0.00"); taxAmountField.setText("0.00"); calculateRowTotals(); }
 }

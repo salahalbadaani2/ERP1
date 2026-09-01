@@ -178,8 +178,16 @@ public class PostingEngine {
                         "تخفيض تكلفة المبيعات المستردة", invoice.getInventoryCost());
             }
 
-            // حفظ الفاتورة في جدول sales_return_invoices داخل نفس الاتصال
-            invoice.saveToDatabase(conn);
+            // حفظ الفاتورة في جدول sales_return_notes داخل نفس الاتصال
+            try (PreparedStatement ps = conn.prepareStatement("INSERT INTO sales_return_notes (return_code, customer_account, sales_return_account, finished_goods_account, cogs_account, total_amount) VALUES (?, ?, ?, ?, ?, ?)")) {
+                ps.setString(1, invoice.getInvoiceCode());
+                ps.setString(2, invoice.getCustomerAccount());
+                ps.setString(3, invoice.getSalesReturnAccount());
+                ps.setString(4, invoice.getFinishedGoodsAccount());
+                ps.setString(5, invoice.getCogsAccount());
+                ps.setDouble(6, invoice.getTotalCustomerCredit());
+                ps.executeUpdate();
+            }
 
             // ترحيل القيد وتحديث الأرصدة داخل نفس الاتصال والمعاملة
             return postJournalEntry(conn, jv);
