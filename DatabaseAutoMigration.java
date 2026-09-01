@@ -12,6 +12,11 @@ public final class DatabaseAutoMigration {
         try (Connection connection = DatabaseManager.getConnection()) {
             connection.setAutoCommit(false);
             try (Statement statement = connection.createStatement()) {
+                try {
+                    statement.executeUpdate("ALTER TABLE inventory_movements DROP INDEX document_number");
+                } catch (SQLException e) {
+                    // الفهرس قد يكون محذوفاً بالفعل
+                }
                 statement.executeUpdate("CREATE TABLE IF NOT EXISTS document_sequences ("
                         + "document_type VARCHAR(50) PRIMARY KEY, next_number INT NOT NULL) ENGINE=InnoDB");
                 statement.executeUpdate("CREATE TABLE IF NOT EXISTS chart_of_accounts ("

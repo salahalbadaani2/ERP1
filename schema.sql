@@ -84,6 +84,28 @@ CREATE TABLE `sales_invoices` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='فواتير المبيعات الصادرة';
 
 -- ----------------------------------------------------------------------------
+-- 5. جدول حركات المخزون (inventory_movements)
+-- ----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `inventory_movements`;
+CREATE TABLE `inventory_movements` (
+  `movement_id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'معرف الحركة المخزنية',
+  `document_number` VARCHAR(50) NOT NULL COMMENT 'رقم المستند/الفاتورة',
+  `movement_type` VARCHAR(20) NOT NULL COMMENT 'نوع الحركة (RECEIPT/ISSUE)',
+  `item_code` VARCHAR(50) NOT NULL COMMENT 'كود الصنف',
+  `item_name` VARCHAR(255) NOT NULL COMMENT 'اسم الصنف',
+  `quantity` DECIMAL(15,2) NOT NULL COMMENT 'الكمية',
+  `unit_cost` DECIMAL(15,2) NOT NULL COMMENT 'تكلفة الوحدة',
+  `inventory_account` VARCHAR(20) NOT NULL COMMENT 'حساب المخزون',
+  `counter_account` VARCHAR(20) NOT NULL COMMENT 'الحساب المقابل',
+  `receiver` VARCHAR(255) DEFAULT NULL COMMENT 'المستلم',
+  `deliverer` VARCHAR(255) DEFAULT NULL COMMENT 'المورد',
+  `narration` TEXT DEFAULT NULL COMMENT 'البيان والشرح',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT 'تاريخ الإنشاء',
+  INDEX `idx_doc_number` (`document_number`),
+  INDEX `idx_item_code` (`item_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='جدول حركات المخزون';
+
+-- ----------------------------------------------------------------------------
 -- 5. جدول فواتير وأذون مردودات المبيعات (sales_return_invoices)
 -- ----------------------------------------------------------------------------
 DROP TABLE IF EXISTS `sales_return_invoices`;
