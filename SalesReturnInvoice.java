@@ -158,6 +158,25 @@ public class SalesReturnInvoice {
     }
 
     /**
+     * حفظ الفاتورة باستخدام اتصال موحد مُمرَّر من الخارج.
+     */
+    public void saveToDatabase(Connection conn) {
+        String sql = "INSERT INTO sales_return_notes (return_code, customer_account, sales_return_account, finished_goods_account, cogs_account, total_amount) VALUES (?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, invoiceCode);
+            pstmt.setString(2, customerAccount);
+            pstmt.setString(3, salesReturnAccount);
+            pstmt.setString(4, finishedGoodsAccount);
+            pstmt.setString(5, cogsAccount);
+            pstmt.setDouble(6, getTotalCustomerCredit());
+            pstmt.executeUpdate();
+            System.out.println("Success: Sales Return Invoice saved to MySQL Database.");
+        } catch (SQLException e) {
+            System.err.println("Error saving Sales Return Invoice to DB: " + e.getMessage());
+        }
+    }
+
+    /**
      * الدالة الرئيسية (main) لتشغيل واختبار فاتورة مردودات المبيعات ذاتياً من الطرفية Terminal
      */
     public static void main(String[] args) {

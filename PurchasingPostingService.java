@@ -7,42 +7,116 @@ public final class PurchasingPostingService {
     private PurchasingPostingService() {
     }
 
+    /**
+     * ترحيل فاتورة مشتريات باتصال داخلي: إنشاء اتصال + بدء معاملة + ترحيل كامل.
+     */
     public static boolean postPurchase(PurchaseInvoice invoice) {
-        if (invoice == null) throw new IllegalArgumentException("بيانات فاتورة المشتريات مطلوبة.");
-        requireInventoryData(invoice.getItemCode(), invoice.getQuantity(), invoice.getUnitCost());
-        requireAmountMatchesQuantity(invoice.getAmount(), invoice.getQuantity(), invoice.getUnitCost());
-        JournalEntry entry = new JournalEntry("JV-PUR-" + invoice.getInvoiceCode(), invoice.getInvoiceCode(),
-                "INVENTORY", "إثبات شراء مواد خام من المورد: " + invoice.getInvoiceCode());
-        entry.addDebitLine(invoice.getGrirAccount(), "مخزون المواد الخام", "إضافة مواد خام للمخزون", invoice.getAmount());
-        if (invoice.getTaxAmount() > 0) {
-            entry.addDebitLine(invoice.getInputTaxAccount(), "ضريبة مشتريات مدخلات", "إثبات ضريبة المدخلات", invoice.getTaxAmount());
+        Connection conn = null;
+        try {
+            conn = DatabaseManager.getConnection();
+            conn.setAutoCommit(false);
+            boolean success = postPurchase(conn, invoice);
+            return success;
+        } catch (Exception e) {
+            if (conn != null) {
+                try { conn.rollback(); } catch (Exception ignored) {}
+            }
+            System.err.println("فشل ترحيل فاتورة المشتريات: " + e.getMessage());
+            return false;
+        } finally {
+            if (conn != null) {
+                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored) {}
+            }
         }
-        entry.addCreditLine(invoice.getVendorAccount(), "حساب المورد", "إثبات مستحقات المورد", invoice.getTotalVendorCredit());
-        return PostingEngine.postJournalEntry(entry, connection -> {
-            savePurchase(connection, invoice);
-            InventoryPostingService.receiveInTransaction(connection, invoice.getInvoiceCode(), invoice.getItemCode(),
-                invoice.getItemCode(), invoice.getQuantity(), invoice.getUnitCost(), invoice.getGrirAccount(),
-                invoice.getVendorAccount(), "", "", "استلام مشتريات");
-        });
     }
 
-    public static boolean postPurchaseReturn(PurchaseReturnInvoice invoice) {
-        if (invoice == null) throw new IllegalArgumentException("بيانات مردود المشتريات مطلوبة.");
-        requireInventoryData(invoice.getItemCode(), invoice.getQuantity(), invoice.getUnitCost());
-        requireAmountMatchesQuantity(invoice.getReturnAmount(), invoice.getQuantity(), invoice.getUnitCost());
-        JournalEntry entry = new JournalEntry("JV-PR-" + invoice.getInvoiceCode(), invoice.getInvoiceCode(),
-                "INVENTORY", "إثبات مردود مواد خام إلى المورد: " + invoice.getInvoiceCode());
-        entry.addDebitLine(invoice.getVendorAccount(), "حساب المورد", "تخفيض مستحقات المورد", invoice.getTotalVendorDebit());
-        entry.addCreditLine(invoice.getGrirAccount(), "مخزون المواد الخام", "إخراج المواد المرتجعة من المخزون", invoice.getReturnAmount());
-        if (invoice.getTaxAmount() > 0) {
-            entry.addCreditLine(invoice.getInputTaxAccount(), "ضريبة مشتريات مدخلات", "عكس ضريبة المدخلات", invoice.getTaxAmount());
+    /**
+     * ترحيل فاتورة مشتريات باستخدام اتصال موحد مُمرَّر من الخارج.
+     * يفترض أن الاتصال تم فتحه بـ setAutoCommit(false) من الخارج.
+     */
+    public static boolean postPurchase(Connection conn, PurchaseInvoice invoice) {
+        try {
+            requireInventoryData(invoice.getItemCode(), invoice.getQuantity(), invoice.getUnitCost());
+            requireAmountMatchesQuantity(invoice.getAmount(), invoice.getQuantity(), invoice.getUnitCost());
+
+            JournalEntry entry = new JournalEntry("JV-PUR-" + invoice.getInvoiceCode(), invoice.getInvoiceCode(),
+                    "INVENTORY", "إثبات شراء مواد خام من المورد: " + invoice.getInvoiceCode());
+            entry.addDebitLine(invoice.getGrirAccount(), "مخزون المواد الخام",
+                    "إضافة مواد خام للمخزون", invoice.getAmount());
+            if (invoice.getTaxAmount() > 0) {
+                entry.addDebitLine(invoice.getInputTaxAccount(), "ضريبة مشتريات مدخلات",
+                        "إثبات ضريبة المدخلات", invoice.getTaxAmount());
+            }
+            entry.addCreditLine(invoice.getVendorAccount(), "حساب المورد",
+                    "إثبات مستحقات المورد", invoice.getTotalVendorCredit());
+
+            // ترحيل القيد اليومي + حفظ المستند + حركة المخزون داخل اتصال واحد
+            return PostingEngine.postJournalEntry(conn, entry, connection -> {
+                savePurchase(connection, invoice);
+                InventoryPostingService.receiveInTransaction(connection, invoice.getInvoiceCode(),
+                        invoice.getItemCode(), invoice.getItemCode(), invoice.getQuantity(),
+                        invoice.getUnitCost(), invoice.getGrirAccount(), invoice.getVendorAccount(),
+                        "", "", "استلام مشتريات");
+            });
+        } catch (Exception e) {
+            try { conn.rollback(); } catch (Exception ignored) {}
+            throw new RuntimeException(e);
         }
-        return PostingEngine.postJournalEntry(entry, connection -> {
-            savePurchaseReturn(connection, invoice);
-            InventoryPostingService.issueInTransaction(connection, invoice.getInvoiceCode(), invoice.getItemCode(),
-                invoice.getItemCode(), invoice.getQuantity(), invoice.getUnitCost(), invoice.getGrirAccount(),
-                invoice.getVendorAccount(), "", "", "صرف مردود مشتريات");
-        });
+    }
+
+    /**
+     * ترحيل مردود مشتريات باتصال داخلي.
+     */
+    public static boolean postPurchaseReturn(PurchaseReturnInvoice invoice) {
+        Connection conn = null;
+        try {
+            conn = DatabaseManager.getConnection();
+            conn.setAutoCommit(false);
+            boolean success = postPurchaseReturn(conn, invoice);
+            return success;
+        } catch (Exception e) {
+            if (conn != null) {
+                try { conn.rollback(); } catch (Exception ignored) {}
+            }
+            System.err.println("فشل ترحيل مردود المشتريات: " + e.getMessage());
+            return false;
+        } finally {
+            if (conn != null) {
+                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    /**
+     * ترحيل مردود مشتريات باستخدام اتصال موحد مُمرَّر من الخارج.
+     */
+    public static boolean postPurchaseReturn(Connection conn, PurchaseReturnInvoice invoice) {
+        try {
+            requireInventoryData(invoice.getItemCode(), invoice.getQuantity(), invoice.getUnitCost());
+            requireAmountMatchesQuantity(invoice.getReturnAmount(), invoice.getQuantity(), invoice.getUnitCost());
+
+            JournalEntry entry = new JournalEntry("JV-PR-" + invoice.getInvoiceCode(), invoice.getInvoiceCode(),
+                    "INVENTORY", "إثبات مردود مواد خام إلى المورد: " + invoice.getInvoiceCode());
+            entry.addDebitLine(invoice.getVendorAccount(), "حساب المورد",
+                    "تخفيض مستحقات المورد", invoice.getTotalVendorDebit());
+            entry.addCreditLine(invoice.getGrirAccount(), "مخزون المواد الخام",
+                    "إخراج المواد المرتجعة من المخزون", invoice.getReturnAmount());
+            if (invoice.getTaxAmount() > 0) {
+                entry.addCreditLine(invoice.getInputTaxAccount(), "ضريبة مشتريات مدخلات",
+                        "عكس ضريبة المدخلات", invoice.getTaxAmount());
+            }
+
+            return PostingEngine.postJournalEntry(conn, entry, connection -> {
+                savePurchaseReturn(connection, invoice);
+                InventoryPostingService.issueInTransaction(connection, invoice.getInvoiceCode(),
+                        invoice.getItemCode(), invoice.getItemCode(), invoice.getQuantity(),
+                        invoice.getUnitCost(), invoice.getGrirAccount(), invoice.getVendorAccount(),
+                        "", "", "صرف مردود مشتريات");
+            });
+        } catch (Exception e) {
+            try { conn.rollback(); } catch (Exception ignored) {}
+            throw new RuntimeException(e);
+        }
     }
 
     private static void savePurchase(Connection connection, PurchaseInvoice invoice) throws SQLException {

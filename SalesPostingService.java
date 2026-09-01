@@ -8,58 +8,134 @@ public final class SalesPostingService {
     private SalesPostingService() {
     }
 
+    /**
+     * ترحيل مبيعات باتصال داخلي: إنشاء اتصال + بدء معاملة + ترحيل كامل.
+     */
     public static boolean postSale(String invoiceCode, String invoiceDate, String customerAccount,
-                                   String revenueAccount, String taxAccount, String cogsAccount,
-                                   String inventoryAccount, String itemCode, String itemName,
-                                   double quantity, double salePrice, double unitCost, boolean taxApplied) {
-        requirePositive(quantity, "الكمية");
-        final double actualUnitCost = averageCost(itemCode, unitCost);
-        requirePositive(actualUnitCost, "متوسط تكلفة الصنف");
-        double base = quantity * salePrice;
-        double tax = taxApplied ? base * 0.15 : 0;
-        double total = base + tax;
-        double inventoryValue = quantity * actualUnitCost;
-        JournalEntry entry = new JournalEntry("JV-SALES-" + invoiceCode, invoiceCode, "SALES",
-                "إثبات مبيعات وصرف مخزني: " + invoiceCode);
-        entry.addDebitLine(customerAccount, "العميل", "إجمالي استحقاق المبيعات", total);
-        entry.addCreditLine(revenueAccount, "إيراد المبيعات", "إيراد المبيعات", base);
-        if (tax > 0) entry.addCreditLine(taxAccount, "ضريبة المبيعات", "ضريبة القيمة المضافة", tax);
-        entry.addDebitLine(cogsAccount, "تكلفة المبيعات", "تكلفة البضاعة المباعة", inventoryValue);
-        entry.addCreditLine(inventoryAccount, "مخزون المنتجات التامة", "صرف المنتج المباع", inventoryValue);
-        return PostingEngine.postJournalEntry(entry, connection -> {
-            saveMovement(connection, invoiceCode, invoiceDate, "SALE", itemCode, itemName, -quantity,
-                    actualUnitCost, inventoryAccount, cogsAccount);
-        });
+                                       String revenueAccount, String taxAccount, String cogsAccount,
+                                       String inventoryAccount, String itemCode, String itemName,
+                                       double quantity, double salePrice, double unitCost, boolean taxApplied) {
+        Connection conn = null;
+        try {
+            conn = DatabaseManager.getConnection();
+            conn.setAutoCommit(false);
+            boolean success = postSale(conn, invoiceCode, invoiceDate, customerAccount,
+                    revenueAccount, taxAccount, cogsAccount, inventoryAccount, itemCode, itemName,
+                    quantity, salePrice, unitCost, taxApplied);
+            return success;
+        } catch (Exception e) {
+            if (conn != null) {
+                try { conn.rollback(); } catch (Exception ignored) {}
+            }
+            System.err.println("فشل ترحيل فاتورة المبيعات: " + e.getMessage());
+            return false;
+        } finally {
+            if (conn != null) {
+                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored) {}
+            }
+        }
     }
 
-    public static boolean postSalesReturn(SalesReturnInvoice invoice, double quantity, String itemCode, String itemName) {
-        if (invoice == null) throw new IllegalArgumentException("بيانات مردود المبيعات مطلوبة.");
-        requirePositive(quantity, "كمية المرتجع");
-        requirePositive(invoice.getInventoryCost(), "قيمة التكلفة المخزنية");
-        double unitCost = invoice.getInventoryCost() / quantity;
-        JournalEntry entry = new JournalEntry("JV-SR-" + invoice.getInvoiceCode(), invoice.getInvoiceCode(),
-                "SALES_RETURN", "إثبات مردود مبيعات واستلام مخزني: " + invoice.getInvoiceCode());
-        entry.addDebitLine(invoice.getSalesReturnAccount(), "مردودات المبيعات", "عكس إيراد المبيعات", invoice.getReturnAmount());
-        if (invoice.isTaxApplied() && invoice.getTaxAmount() > 0) {
-            entry.addDebitLine(invoice.getTaxAccount(), "ضريبة المبيعات", "عكس ضريبة المبيعات", invoice.getTaxAmount());
+    /**
+     * ترحيل مبيعات باستخدام اتصال موحد مُمرَّر من الخارج.
+     * يفترض أن الاتصال تم فتحه بـ setAutoCommit(false) من الخارج.
+     */
+    public static boolean postSale(Connection conn, String invoiceCode, String invoiceDate,
+                                       String customerAccount, String revenueAccount, String taxAccount,
+                                       String cogsAccount, String inventoryAccount, String itemCode,
+                                       String itemName, double quantity, double salePrice,
+                                       double unitCost, boolean taxApplied) {
+        try {
+            requirePositive(quantity, "الكمية");
+            final double actualUnitCost = averageCost(itemCode, unitCost);
+            requirePositive(actualUnitCost, "متوسط تكلفة الصنف");
+            double base = quantity * salePrice;
+            double tax = taxApplied ? base * 0.15 : 0;
+            double total = base + tax;
+            double inventoryValue = quantity * actualUnitCost;
+
+            JournalEntry entry = new JournalEntry("JV-SALES-" + invoiceCode, invoiceCode, "SALES",
+                    "إثبات مبيعات وصرف مخزني: " + invoiceCode);
+            entry.addDebitLine(customerAccount, "العميل", "إجمالي استحقاق المبيعات", total);
+            entry.addCreditLine(revenueAccount, "إيراد المبيعات", "إيراد المبيعات", base);
+            if (tax > 0) entry.addCreditLine(taxAccount, "ضريبة المبيعات", "ضريبة القيمة المضافة", tax);
+            entry.addDebitLine(cogsAccount, "تكلفة المبيعات", "تكلفة البضاعة المباعة", inventoryValue);
+            entry.addCreditLine(inventoryAccount, "مخزون المنتجات التامة", "صرف المنتج المباع", inventoryValue);
+
+            // ترحيل القيد اليومي + حركة المخزون داخل اتصال واحد
+            return PostingEngine.postJournalEntry(conn, entry, connection ->
+                    saveMovement(connection, invoiceCode, invoiceDate, "SALE", itemCode, itemName,
+                            -quantity, actualUnitCost, inventoryAccount, cogsAccount));
+        } catch (Exception e) {
+            try { conn.rollback(); } catch (Exception ignored) {}
+            throw new RuntimeException(e);
         }
-        entry.addCreditLine(invoice.getCustomerAccount(), "العميل", "تخفيض استحقاق العميل", invoice.getTotalCustomerCredit());
-        entry.addDebitLine(invoice.getFinishedGoodsAccount(), "مخزون المنتجات التامة", "استلام المرتجع", invoice.getInventoryCost());
-        entry.addCreditLine(invoice.getCogsAccount(), "تكلفة المبيعات", "عكس تكلفة البضاعة", invoice.getInventoryCost());
-        return PostingEngine.postJournalEntry(entry, connection -> saveMovement(connection, invoice.getInvoiceCode(),
-                invoice.getReturnDate(), "SALES_RETURN", itemCode, itemName, quantity, unitCost,
-                invoice.getFinishedGoodsAccount(), invoice.getCogsAccount()));
+    }
+
+    /**
+     * ترحيل مردودات مبيعات باتصال داخلي.
+     */
+    public static boolean postSalesReturn(SalesReturnInvoice invoice, double quantity, String itemCode, String itemName) {
+        Connection conn = null;
+        try {
+            conn = DatabaseManager.getConnection();
+            conn.setAutoCommit(false);
+            boolean success = postSalesReturn(conn, invoice, quantity, itemCode, itemName);
+            return success;
+        } catch (Exception e) {
+            if (conn != null) {
+                try { conn.rollback(); } catch (Exception ignored) {}
+            }
+            System.err.println("فشل ترحيل مردودات المبيعات: " + e.getMessage());
+            return false;
+        } finally {
+            if (conn != null) {
+                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    /**
+     * ترحيل مردودات مبيعات باستخدام اتصال موحد مُمرَّر من الخارج.
+     */
+    public static boolean postSalesReturn(Connection conn, SalesReturnInvoice invoice,
+                                             double quantity, String itemCode, String itemName) {
+        try {
+            requirePositive(quantity, "كمية المرتجع");
+            requirePositive(invoice.getInventoryCost(), "قيمة التكلفة المخزنية");
+            double unitCost = invoice.getInventoryCost() / quantity;
+
+            JournalEntry entry = new JournalEntry("JV-SR-" + invoice.getInvoiceCode(), invoice.getInvoiceCode(),
+                    "SALES_RETURN", "إثبات مردود مبيعات واستلام مخزني: " + invoice.getInvoiceCode());
+            entry.addDebitLine(invoice.getSalesReturnAccount(), "مردودات المبيعات",
+                    "عكس إيراد المبيعات", invoice.getReturnAmount());
+            if (invoice.isTaxApplied() && invoice.getTaxAmount() > 0) {
+                entry.addDebitLine(invoice.getTaxAccount(), "ضريبة المبيعات",
+                        "عكس ضريبة المبيعات", invoice.getTaxAmount());
+            }
+            entry.addCreditLine(invoice.getCustomerAccount(), "العميل",
+                    "تخفيض استحقاق العميل", invoice.getTotalCustomerCredit());
+            entry.addDebitLine(invoice.getFinishedGoodsAccount(), "مخزون المنتجات التامة",
+                    "استلام المرتجع", invoice.getInventoryCost());
+            entry.addCreditLine(invoice.getCogsAccount(), "تكلفة المبيعات",
+                    "عكس تكلفة البضاعة", invoice.getInventoryCost());
+
+            return PostingEngine.postSalesReturn(conn, invoice);
+        } catch (Exception e) {
+            try { conn.rollback(); } catch (Exception ignored) {}
+            throw new RuntimeException(e);
+        }
     }
 
     private static void saveMovement(Connection connection, String documentNumber, String date, String type,
-                                     String itemCode, String itemName, double quantity, double unitCost,
-                                     String inventoryAccount, String counterAccount) throws SQLException {
+                                         String itemCode, String itemName, double quantity, double unitCost,
+                                         String inventoryAccount, String counterAccount) throws SQLException {
         if (quantity > 0) {
             InventoryPostingService.receiveInTransaction(connection, documentNumber, itemCode, itemName,
-                quantity, unitCost, inventoryAccount, counterAccount, "", "", type);
+                    quantity, unitCost, inventoryAccount, counterAccount, "", "", type);
         } else {
             InventoryPostingService.issueInTransaction(connection, documentNumber, itemCode, itemName,
-                -quantity, unitCost, inventoryAccount, counterAccount, "", "", type);
+                    -quantity, unitCost, inventoryAccount, counterAccount, "", "", type);
         }
     }
 
