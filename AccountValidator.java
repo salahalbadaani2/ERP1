@@ -2,6 +2,10 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.regex.Pattern;
 
 /**
@@ -15,43 +19,90 @@ import java.util.regex.Pattern;
 public class AccountValidator {
     /**
      * التحقق المحاسبي والأمني لمنع القيد على الحسابات الرئيسية
+     * يستخرج كود الحساب من الوصف ويتحقق من صلاحيته عبر قاعدة البيانات
      */
     public static void validatePostingAccount(String accountDescription) {
         if (accountDescription == null || accountDescription.trim().isEmpty()) {
             throw new IllegalArgumentException("خطأ: لم يتم تحديد الحساب المالي.");
         }
-        if (accountDescription.contains("حساب رئيسي") || accountDescription.contains("رئيسي")) {
-            throw new IllegalArgumentException("حظر محاسبي: لا يمكن إجراء معاملات مالية على الحسابات الرئيسية (" + accountDescription + "). القيود مسموحة فقط على الحسابات الفرعية.");
-        }
+        String code = extractAccountCode(accountDescription);
+        validateSubAccount(code);
     }
 
     /**
-     * دالة التحقق للحسابات الفرعية رمياً للاستثناءات (مطلوبة لـ DeliveryNote و VanTransferNote)
+     * يستخرج كود الحساب من نص الوصف (مثال: "1210301 - مخزن المنتجات (حساب فرعي)" -> "1210301")
      */
-    public static void validateSubAccount(String accountDescription, String contextMessage) {
-        if (accountDescription == null || accountDescription.trim().isEmpty()) {
+    private static String extractAccountCode(String description) {
+        if (description == null || description.trim().isEmpty()) {
+            return "";
+        }
+        // التنسيق المتوقع: "كود - اسم (نوع)" أو "كود - اسم"
+        String trimmed = description.trim();
+        int dashIndex = trimmed.indexOf(" - ");
+        if (dashIndex > 0) {
+            return trimmed.substring(0, dashIndex).trim();
+        }
+        // إذا لم يوجد فاصل، نعتبر النص كله كود
+        return trimmed;
+    }
+
+    /**
+     * التحقق من صلاحية حساب للترحيل - استعلام مباشر لقاعدة البيانات
+     * الحساب صالح فقط إذا كان موجوداً في chart_of_accounts وحالته is_sub_account = 1
+     */
+    public static void validateSubAccount(String accountCode, String contextMessage) {
+        if (accountCode == null || accountCode.trim().isEmpty()) {
             throw new IllegalArgumentException("خطأ في [" + contextMessage + "]: لم يتم تحديد الحساب المالي.");
         }
-        validatePostingAccount(accountDescription);
+        validateSubAccount(accountCode);
     }
 
-    public static void validateSubAccount(String accountDescription) {
-        validatePostingAccount(accountDescription);
+    public static void validateSubAccount(String accountCode) {
+        if (accountCode == null || accountCode.trim().isEmpty()) {
+            throw new IllegalArgumentException("خطأ: لم يتم تحديد كود الحساب المالي.");
+        }
+        String code = accountCode.trim();
+
+        String sql = "SELECT is_sub_account FROM chart_of_accounts WHERE account_code = ?";
+        try (Connection connection = DatabaseManager.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, code);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next() || !result.getBoolean(1)) {
+                    throw new IllegalArgumentException(
+                        "خطأ أمني ومحاسبي: الحساب (" + code + ") غير موجود أو ليس حساباً فرعياً صالحاً للترحيل.");
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("فشل الاتصال بقاعدة البيانات للتحقق من الحساب: " + code, e);
+        }
     }
 
     /**
-     * دالة الفحص البوليني المباشر (مطلوبة لـ TreasuryVoucher)
+     * دالة الفحص البوليني المباشر - استعلام مباشر لقاعدة البيانات
+     * الحساب صالح فقط إذا كان موجوداً في chart_of_accounts وحالته is_sub_account = 1
      */
-    public static boolean isSubAccount(String accountDescription) {
-        if (accountDescription == null || accountDescription.trim().isEmpty()) {
+    public static boolean isSubAccount(String accountCode) {
+        if (accountCode == null || accountCode.trim().isEmpty()) {
             return false;
         }
-        return !accountDescription.contains("حساب رئيسي") && !accountDescription.contains("رئيسي")
-            && accountDescription.trim().length() > 3;
+        String code = accountCode.trim();
+
+        String sql = "SELECT is_sub_account FROM chart_of_accounts WHERE account_code = ?";
+        try (Connection connection = DatabaseManager.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, code);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() && result.getBoolean(1);
+            }
+        } catch (SQLException e) {
+            // فشل الاتصال بقاعدة البيانات - الحساب غير صالح
+            return false;
+        }
     }
 
-    public static boolean isValidSubAccount(String accountDescription) {
-        return isSubAccount(accountDescription);
+    public static boolean isValidSubAccount(String accountCode) {
+        return isSubAccount(accountCode);
     }
 
     /**

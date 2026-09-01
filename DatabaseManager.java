@@ -42,7 +42,8 @@ public class DatabaseManager {
                 return result.next() && result.getBoolean(1);
             }
         } catch (SQLException exception) {
-            return accountCode.trim().length() > 3;
+            // فشل الاتصال بقاعدة البيانات - يُحظر إرجاع true، يجب إرجاع false وإلقاء استثناء لإيقاف المعاملة
+            throw new IllegalStateException("فشل الاتصال بقاعدة البيانات للتحقق من الحساب: " + accountCode, exception);
         }
     }
 
