@@ -74,6 +74,28 @@ public class DatabaseManager {
             // 2. تعديل ترميز قاعدة البيانات القائمة لدعم النصوص العربية بالكامل
             stmt.executeUpdate("ALTER DATABASE erp_factory_db CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci");
 
+            // مسح الفهارس القديمة على عمود document_number في جدول حركات المخزون
+            try {
+                stmt.executeUpdate("ALTER TABLE inventory_movements DROP INDEX document_number");
+            } catch (SQLException ignored) {}
+
+            // جدول حركات المخزون (inventory_movements) - إنشاء تلقائي عند بداية التشغيل
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS inventory_movements ("
+                    + "movement_id BIGINT AUTO_INCREMENT PRIMARY KEY, "
+                    + "document_number VARCHAR(50), "
+                    + "movement_type VARCHAR(20), "
+                    + "item_code VARCHAR(50), "
+                    + "item_name VARCHAR(255), "
+                    + "quantity DECIMAL(12, 3), "
+                    + "unit_cost DECIMAL(15, 2), "
+                    + "inventory_account VARCHAR(20), "
+                    + "counter_account VARCHAR(20), "
+                    + "receiver VARCHAR(255), "
+                    + "deliverer VARCHAR(255), "
+                    + "narration TEXT, "
+                    + "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                    + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
             // بطاقة الأصناف والمخزون: تعتمد عليها شاشات الأصناف والمخازن وحركات البيع.
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS inventory_items ("
                     + "item_code VARCHAR(50) PRIMARY KEY, item_name VARCHAR(255) NOT NULL, "

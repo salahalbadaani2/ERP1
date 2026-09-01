@@ -13,7 +13,7 @@ public class PurchaseInvoiceForm extends JFrame {
     private final JTextField invoiceNumber = new JTextField();
     private final JTextField invoiceDate = new JTextField(LocalDate.now().toString());
     private JTextField supplierAccount = new JTextField();
-    private JTextField inputTaxAccount = new JTextField("220301");
+    private JTextField inputTaxAccount = new JTextField();
     private JCheckBox chkApplyTax = new JCheckBox("تطبيق الضريبة");
     private JTextField txtTaxRate = new JTextField("0.15");
     private DefaultTableModel tableModel;
@@ -219,6 +219,18 @@ public class PurchaseInvoiceForm extends JFrame {
         return wrapper;
     }
 
+    private String getDefaultSubAccount(String parentPrefix) {
+        String sql = "SELECT account_code FROM chart_of_accounts WHERE account_code LIKE ? AND is_sub_account = 1 ORDER BY account_code LIMIT 1";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, parentPrefix + "%");
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getString("account_code");
+            }
+        } catch (SQLException ignored) {}
+        return "";
+    }
+
     private void autoFillItemCode(JTextField accountField) {
         String accountCode = accountField.getText().trim();
         if (accountCode.isEmpty()) return;
@@ -265,7 +277,8 @@ public class PurchaseInvoiceForm extends JFrame {
             double unitCost = parseDoubleSafe(tableModel.getValueAt(0, 7));
             boolean taxApplied = chkApplyTax.isSelected();
             double taxRate = parseDoubleSafe(txtTaxRate.getText());
-            PurchaseInvoice invoice = new PurchaseInvoice(invoiceNumber.getText(), "1210101",
+            String grirAccount = getDefaultSubAccount("12101");
+            PurchaseInvoice invoice = new PurchaseInvoice(invoiceNumber.getText(), grirAccount,
                     supplierAccount.getText().trim(), inputTaxAccount.getText().trim(), total, taxApplied, taxRate,
                     itemCode, qty, unitCost);
             if (!invoice.postToAccounting()) throw new IllegalStateException("تعذر اعتماد فاتورة المشتريات.");
@@ -314,7 +327,7 @@ public class PurchaseInvoiceForm extends JFrame {
         invoiceNumber.setText(DocumentNumberService.next("PURCHASE_INVOICE", "PUR-"));
         invoiceDate.setText(LocalDate.now().toString());
         supplierAccount.setText("");
-        inputTaxAccount.setText("220301");
+        inputTaxAccount.setText("");
         chkApplyTax.setSelected(false);
         txtTaxRate.setText("0.15");
         taxAmountField.setText("0.00");
