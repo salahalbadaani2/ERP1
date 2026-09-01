@@ -316,7 +316,9 @@ public class ItemManagementForm extends JFrame {
                 masterAccountList.add(display);
                 cmbSubAccount.addItem(display);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ex) {
+            System.err.println("خطأ في تحميل الحسابات المالية: " + ex.getMessage());
+        }
     }
 
     /**
@@ -356,23 +358,31 @@ public class ItemManagementForm extends JFrame {
         btnTree.addActionListener(e -> chooseInventoryAccount());
 
         cmbSubAccount.addActionListener(e -> {
-            Object selected = cmbSubAccount.getSelectedItem();
-            if (selected != null && selected.toString().contains(" - ")) {
-                String fullText = selected.toString();
-                String[] parts = fullText.split(" - ");
-                String code = parts[0].trim();
-                String name = parts[1].replaceAll("\\(حساب.*\\)", "").trim();
+            try {
+                Object selected = cmbSubAccount.getSelectedItem();
+                if (selected != null) {
+                    String fullText = selected.toString();
+                    int dashIndex = fullText.indexOf(" - ");
+                    if (dashIndex > 0) {
+                        String code = fullText.substring(0, dashIndex).trim();
+                        String remainder = fullText.substring(dashIndex + 3).trim();
+                        int parenIndex = remainder.indexOf(" (");
+                        String name = (parenIndex > 0 ? remainder.substring(0, parenIndex) : remainder).trim();
 
-                txtSubAccountCode.setText(code);
-                txtBarcode.setText(code);
-                txtItemName.setText(name);
+                        txtSubAccountCode.setText(code);
+                        txtBarcode.setText(code);
+                        txtItemName.setText(name);
 
-                for (ItemMaster item : itemsList) {
-                    if (item.getBarcode().equals(code)) {
-                        displayItemDetails(item);
-                        break;
+                        for (ItemMaster item : itemsList) {
+                            if (item.getBarcode().equals(code)) {
+                                displayItemDetails(item);
+                                break;
+                            }
+                        }
                     }
                 }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "خطأ في قراءة الحساب المختار: " + ex.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
             }
         });
 
