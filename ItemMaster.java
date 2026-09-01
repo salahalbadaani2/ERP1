@@ -11,6 +11,7 @@ public class ItemMaster {
     private String itemName;          // اسم الصنف
     private String itemType;          // نوع المخزون (خام / تشغيل / تام / مناديب)
     private String uom;               // وحدة القياس (حبة / كرتون / باكت)
+    private String unitType;          // نوع الوحدة: COUNT (عددي) أو WEIGHT (وزني)
     private double conversionFactor;  // معامل التحويل
     private double minStockLevel;     // حد الأمان البسيط
     private String expiryDate;        // تاريخ الانتهاء (YYYY-MM-DD)
@@ -18,13 +19,14 @@ public class ItemMaster {
     private double unitCost;          // تكلفة الوحدة
     private double defaultUnitPrice;  // سعر البيع الافتراضي
 
-    public ItemMaster(String barcode, String itemName, String itemType, String uom, 
-                      double conversionFactor, double minStockLevel, String expiryDate, 
+    public ItemMaster(String barcode, String itemName, String itemType, String uom,
+                      String unitType, double conversionFactor, double minStockLevel, String expiryDate,
                       String batchNo, double unitCost, double defaultUnitPrice) {
         this.barcode = barcode;
         this.itemName = itemName;
         this.itemType = itemType;
         this.uom = uom;
+        this.unitType = unitType;
         this.conversionFactor = conversionFactor;
         this.minStockLevel = minStockLevel;
         this.expiryDate = expiryDate;
@@ -37,6 +39,7 @@ public class ItemMaster {
     public String getItemName() { return itemName; }
     public String getItemType() { return itemType; }
     public String getUom() { return uom; }
+    public String getUnitType() { return unitType; }
     public double getConversionFactor() { return conversionFactor; }
     public double getMinStockLevel() { return minStockLevel; }
     public String getExpiryDate() { return expiryDate; }
@@ -45,8 +48,8 @@ public class ItemMaster {
     public double getDefaultUnitPrice() { return defaultUnitPrice; }
 
     public String toLogLine() {
-        return barcode + " | " + itemName + " | " + itemType + " | " + uom + " | " + 
-               conversionFactor + " | " + minStockLevel + " | " + expiryDate + " | " + 
+        return barcode + " | " + itemName + " | " + itemType + " | " + uom + " | " + unitType + " | " +
+               conversionFactor + " | " + minStockLevel + " | " + expiryDate + " | " +
                batchNo + " | " + unitCost + " | " + defaultUnitPrice;
     }
 }

@@ -1,5 +1,9 @@
 import javax.swing.*;
 import java.awt.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
 
 public class PurchaseInvoiceForm extends JFrame {
@@ -10,10 +14,13 @@ public class PurchaseInvoiceForm extends JFrame {
     private final JTextField inputTaxAccount = new JTextField("220301");
     private final JTextField itemCode = new JTextField("ITEM-101");
     private final JTextField quantity = new JTextField("1");
+    private final JTextField kgField = new JTextField("0");
+    private final JTextField gramField = new JTextField("0");
     private final JTextField unitCost = new JTextField("180");
     private final JTextField amount = new JTextField("180");
     private final JCheckBox taxApplied = new JCheckBox("ضريبة مدخلات", false);
     private final JTextField taxRate = new JTextField("0.15");
+    private final JComboBox<String> unitTypeCombo = new JComboBox<>(new String[]{"COUNT", "WEIGHT"});
 
     public PurchaseInvoiceForm() {
         setTitle("نظام ERP المصنعي - فاتورة المشتريات");
@@ -34,7 +41,20 @@ public class PurchaseInvoiceForm extends JFrame {
         addRow(form, "حساب المورد", accountField(supplierAccount, "21"));
         addRow(form, "حساب ضريبة المدخلات", accountField(inputTaxAccount, "22"));
         addRow(form, "رقم الصنف", itemCode);
-        addRow(form, "الكمية", quantity);
+        addRow(form, "نوع الصنف", unitTypeCombo);
+        JPanel qtyPanel = new JPanel(new GridLayout(1, 3, 5, 5));
+        qtyPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        qtyPanel.add(new JLabel("الكمية (كرتون/عدد):"));
+        qtyPanel.add(quantity);
+        qtyPanel.add(new JLabel("كجم / غرام"));
+        JPanel weightPanel = new JPanel(new GridLayout(1, 4, 5, 5));
+        weightPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        weightPanel.add(new JLabel("الكيلو:"));
+        weightPanel.add(kgField);
+        weightPanel.add(new JLabel("الجرام:"));
+        weightPanel.add(gramField);
+        addRow(form, "الكمية العددية/الكرتون", qtyPanel);
+        addRow(form, "الأوزان (للأصناف الوزنية)", weightPanel);
         addRow(form, "تكلفة الوحدة", unitCost);
         addRow(form, "قيمة المشتريات قبل الضريبة", amount);
         addRow(form, "تطبيق الضريبة", taxApplied);
@@ -76,9 +96,18 @@ public class PurchaseInvoiceForm extends JFrame {
         try {
             double base = Double.parseDouble(amount.getText().trim());
             double rate = Double.parseDouble(taxRate.getText().trim());
+            String item = itemCode.getText().trim();
+            double qty;
+            if ("WEIGHT".equals(unitTypeCombo.getSelectedItem())) {
+                double kg = Double.parseDouble(kgField.getText().trim());
+                double g = Double.parseDouble(gramField.getText().trim());
+                qty = kg + (g / 1000.0);
+            } else {
+                qty = Double.parseDouble(quantity.getText().trim());
+            }
             PurchaseInvoice invoice = new PurchaseInvoice(invoiceNumber.getText(), inventoryAccount.getText().trim(),
                     supplierAccount.getText().trim(), inputTaxAccount.getText().trim(), base, taxApplied.isSelected(), rate,
-                    itemCode.getText().trim(), Double.parseDouble(quantity.getText().trim()), Double.parseDouble(unitCost.getText().trim()));
+                    item, qty, Double.parseDouble(unitCost.getText().trim()));
             if (!invoice.postToAccounting()) throw new IllegalStateException("تعذر اعتماد فاتورة المشتريات.");
             JOptionPane.showMessageDialog(this, "تم اعتماد الفاتورة وترحيل قيد المخزون والمورد وتحديث رصيده.", "نجاح", JOptionPane.INFORMATION_MESSAGE);
             reset();
@@ -97,6 +126,20 @@ public class PurchaseInvoiceForm extends JFrame {
     private void reset() {
         invoiceNumber.setText(DocumentNumberService.next("PURCHASE_INVOICE", "PUR-"));
         amount.setText("0");
+        kgField.setText("0");
+        gramField.setText("0");
+        quantity.setText("1");
         taxApplied.setSelected(false);
+    }
+
+    private String getItemUnitType(String itemCode) {
+        String sql = "SELECT unit_type FROM inventory_items WHERE item_code = ?";
+        try (Connection connection = DatabaseManager.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, itemCode);
+            try (ResultSet result = statement.executeQuery()) {
+                if (result.next()) return result.getString(1);
+            }
+        } catch (SQLException ignored) {}
+        return "COUNT";
     }
 }

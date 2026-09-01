@@ -19,10 +19,33 @@ public final class DatabaseAutoMigration {
                 }
                 statement.executeUpdate("CREATE TABLE IF NOT EXISTS document_sequences ("
                         + "document_type VARCHAR(50) PRIMARY KEY, next_number INT NOT NULL) ENGINE=InnoDB");
-                statement.executeUpdate("CREATE TABLE IF NOT EXISTS chart_of_accounts ("
-                        + "account_code VARCHAR(20) PRIMARY KEY, account_name VARCHAR(255) NOT NULL, "
-                        + "account_type VARCHAR(20) NOT NULL, parent_code VARCHAR(20), account_level INT NOT NULL, "
-                        + "is_sub_account TINYINT(1) NOT NULL DEFAULT 0, current_balance DECIMAL(18,4) NOT NULL DEFAULT 0) ENGINE=InnoDB");
+                 statement.executeUpdate("CREATE TABLE IF NOT EXISTS chart_of_accounts ("
+                         + "account_code VARCHAR(20) PRIMARY KEY, account_name VARCHAR(255) NOT NULL, "
+                         + "account_type VARCHAR(20) NOT NULL, parent_code VARCHAR(20), account_level INT NOT NULL, "
+                         + "is_sub_account TINYINT(1) NOT NULL DEFAULT 0, current_balance DECIMAL(18,4) NOT NULL DEFAULT 0) ENGINE=InnoDB");
+                statement.executeUpdate("ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit_type VARCHAR(10) NOT NULL DEFAULT 'COUNT' AFTER unit");
+                statement.executeUpdate("ALTER TABLE inventory_movements MODIFY COLUMN quantity DECIMAL(12, 3) NOT NULL");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS sales_invoice_details ("
+                        + "id BIGINT AUTO_INCREMENT PRIMARY KEY, invoice_code VARCHAR(50) NOT NULL, "
+                        + "item_code VARCHAR(50) NOT NULL, item_name VARCHAR(255) NOT NULL, "
+                        + "quantity DECIMAL(12, 3) NOT NULL, unit_price DECIMAL(15, 2) NOT NULL, "
+                        + "amount DECIMAL(15, 2) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                        + "INDEX idx_sid_invoice (invoice_code)) ENGINE=InnoDB");
+                statement.executeUpdate("ALTER TABLE sales_invoice_details MODIFY COLUMN quantity DECIMAL(12, 3) NOT NULL");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS purchase_invoice_details ("
+                        + "id BIGINT AUTO_INCREMENT PRIMARY KEY, invoice_code VARCHAR(50) NOT NULL, "
+                        + "item_code VARCHAR(50) NOT NULL, item_name VARCHAR(255) NOT NULL, "
+                        + "quantity DECIMAL(12, 3) NOT NULL, unit_cost DECIMAL(15, 2) NOT NULL, "
+                        + "amount DECIMAL(15, 2) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                        + "INDEX idx_pid_invoice (invoice_code)) ENGINE=InnoDB");
+                statement.executeUpdate("ALTER TABLE purchase_invoice_details MODIFY COLUMN quantity DECIMAL(12, 3) NOT NULL");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS production_details ("
+                        + "id BIGINT AUTO_INCREMENT PRIMARY KEY, production_order VARCHAR(50) NOT NULL, "
+                        + "item_code VARCHAR(50) NOT NULL, item_name VARCHAR(255) NOT NULL, "
+                        + "quantity DECIMAL(12, 3) NOT NULL, unit_cost DECIMAL(15, 2) NOT NULL, "
+                        + "total_cost DECIMAL(15, 2) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                        + "INDEX idx_pd_order (production_order)) ENGINE=InnoDB");
+                statement.executeUpdate("ALTER TABLE production_details MODIFY COLUMN quantity DECIMAL(12, 3) NOT NULL");
             }
             String sql = "INSERT INTO chart_of_accounts "
                     + "(account_code, account_name, account_type, parent_code, account_level, is_sub_account, current_balance) "

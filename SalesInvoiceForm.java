@@ -41,6 +41,9 @@ public class SalesInvoiceForm extends JFrame {
     private JTextField txtAvailableQty;
     private JTextField txtMinStockLevel;
     private JTextField txtQuantity;
+    private JTextField txtKg;
+    private JTextField txtGram;
+    private JComboBox<String> cmbUnitType;
     private JTextField txtUnitPrice;
     private JTextField txtUnitCost; // تكلفة الإنتاج للوحدة
     private JLabel lblStockAlert;
@@ -195,6 +198,20 @@ public class SalesInvoiceForm extends JFrame {
         txtQuantity = new JTextField("50");
         txtQuantity.setFont(FONT_BOLD);
         itemBox.add(txtQuantity);
+
+        itemBox.add(new JLabel("نوع الصنف:"));
+        cmbUnitType = new JComboBox<>(new String[]{"COUNT", "WEIGHT"});
+        itemBox.add(cmbUnitType);
+
+        JPanel kgGramPanel = new JPanel(new GridLayout(1, 4, 5, 5));
+        kgGramPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        kgGramPanel.add(new JLabel("الكيلو:"));
+        txtKg = new JTextField("0");
+        kgGramPanel.add(txtKg);
+        kgGramPanel.add(new JLabel("الجرام:"));
+        txtGram = new JTextField("0");
+        kgGramPanel.add(txtGram);
+        itemBox.add(kgGramPanel);
 
         itemBox.add(new JLabel("سعر بيع الوحدة (YER):"));
         txtUnitPrice = new JTextField("3200.00");
@@ -384,12 +401,21 @@ public class SalesInvoiceForm extends JFrame {
             calculateTotals();
         });
 
+        cmbUnitType.addActionListener(e -> calculateTotals());
+
         calculateTotals();
     }
 
     private void calculateTotals() {
         try {
-            double qty = Double.parseDouble(txtQuantity.getText().trim());
+            double qty;
+            if ("WEIGHT".equals(cmbUnitType.getSelectedItem())) {
+                double kg = Double.parseDouble(txtKg.getText().trim());
+                double g = Double.parseDouble(txtGram.getText().trim());
+                qty = kg + (g / 1000.0);
+            } else {
+                qty = Double.parseDouble(txtQuantity.getText().trim());
+            }
             double price = Double.parseDouble(txtUnitPrice.getText().trim());
             double cost = Double.parseDouble(txtUnitCost.getText().trim());
             double available = Double.parseDouble(txtAvailableQty.getText().trim());
@@ -429,7 +455,14 @@ public class SalesInvoiceForm extends JFrame {
 
     private void postInvoiceToDatabase() {
         try {
-            double qty = Double.parseDouble(txtQuantity.getText().trim());
+            double qty;
+            if ("WEIGHT".equals(cmbUnitType.getSelectedItem())) {
+                double kg = Double.parseDouble(txtKg.getText().trim());
+                double g = Double.parseDouble(txtGram.getText().trim());
+                qty = kg + (g / 1000.0);
+            } else {
+                qty = Double.parseDouble(txtQuantity.getText().trim());
+            }
             double price = Double.parseDouble(txtUnitPrice.getText().trim());
             double unitCost = Double.parseDouble(txtUnitCost.getText().trim());
             String item = (String) cmbFinishedGoodsItem.getSelectedItem();
@@ -628,6 +661,8 @@ public class SalesInvoiceForm extends JFrame {
     private void clearForm() {
         generateInvoiceNumber();
         txtQuantity.setText("10");
+        txtKg.setText("0");
+        txtGram.setText("0");
         calculateTotals();
     }
 

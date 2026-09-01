@@ -1,6 +1,10 @@
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DocumentFilter;
 import java.awt.*;
 import java.io.*;
 import java.sql.Connection;
@@ -40,6 +44,7 @@ public class ItemManagementForm extends JFrame {
     // عناصر بطاقة القياسات والمحددات للقطاع الغذائي
     // ------------------------------------------------------------------------
     private JComboBox<String> cmbUom;
+    private JComboBox<String> cmbUnitType;
     private JTextField txtConversionFactor;
     private JTextField txtMinStockLevel;
     private JTextField txtExpiryDate;
@@ -186,12 +191,26 @@ public class ItemManagementForm extends JFrame {
 
         GridBagConstraints gbc = createGbc();
 
-        addLabel(card, "وحدة القياس:", gbc, 0, 0);
-        cmbUom = new JComboBox<>(new String[]{"حبه", "جرام", "كيلو", "طن", "مل", "لتر", "باكت", "كرتون", "كيس", "عبوة", "+ إضافة وحدة جديدة..."});
-        addComp(card, cmbUom, gbc, 1, 0);
+        addLabel(card, "نوع الوحدة:", gbc, 0, 0);
+        cmbUnitType = new JComboBox<>(new String[]{"COUNT (عددي)", "WEIGHT (وزني)"});
+        addComp(card, cmbUnitType, gbc, 1, 0);
 
-        addLabel(card, "معامل التحويل (كم حبة بالكرتون):", gbc, 2, 0);
+        addLabel(card, "وحدة القياس:", gbc, 2, 0);
+        cmbUom = new JComboBox<>(new String[]{"حبه", "جرام", "كيلو", "طن", "مل", "لتر", "باكت", "كرتون", "كيس", "عبوة", "+ إضافة وحدة جديدة..."});
+        addComp(card, cmbUom, gbc, 3, 0);
+
+        addLabel(card, "معامل التحويل:", gbc, 2, 0);
         txtConversionFactor = new JTextField("24.0", 10);
+        ((AbstractDocument) txtConversionFactor.getDocument()).setDocumentFilter(new DocumentFilter() {
+            @Override
+            public void insertString(DocumentFilter.FilterBypass fb, int offset, String string, AttributeSet attr) throws BadLocationException {
+                if (string.matches("\\d*")) super.insertString(fb, offset, string, attr);
+            }
+            @Override
+            public void replace(DocumentFilter.FilterBypass fb, int offset, int length, String text, AttributeSet attrs) throws BadLocationException {
+                if (text.matches("\\d*")) super.replace(fb, offset, length, text, attrs);
+            }
+        });
         addComp(card, txtConversionFactor, gbc, 3, 0);
 
         addLabel(card, "حد الأمان البسيط (أقل كمية):", gbc, 0, 1);
@@ -305,13 +324,15 @@ public class ItemManagementForm extends JFrame {
                 while ((line = reader.readLine()) != null) {
                     if (!line.trim().isEmpty() && line.contains(" | ")) {
                         String[] parts = line.split(" \\| ");
-                        if (parts.length >= 10) {
+                        if (parts.length >= 11) {
                             itemsList.add(new ItemMaster(
                                 parts[0].trim(), parts[1].trim(), parts[2].trim(),
-                                parts[3].trim(), Double.parseDouble(parts[4].trim()),
-                                Double.parseDouble(parts[5].trim()), parts[6].trim(),
-                                parts[7].trim(), Double.parseDouble(parts[8].trim()),
-                                Double.parseDouble(parts[9].trim())
+                                parts[3].trim(), parts[4].trim(),
+                                Double.parseDouble(parts[5].trim()),
+                                Double.parseDouble(parts[6].trim()), parts[7].trim(),
+                                parts[8].trim(),
+                                Double.parseDouble(parts[9].trim()),
+                                Double.parseDouble(parts[10].trim())
                             ));
                         }
                     }
@@ -363,6 +384,15 @@ public class ItemManagementForm extends JFrame {
             }
         });
 
+        cmbUnitType.addActionListener(e -> {
+            if ("WEIGHT (وزني)".equals(cmbUnitType.getSelectedItem())) {
+                cmbUom.setSelectedItem("كيلو");
+                txtConversionFactor.setText("1000");
+            } else {
+                txtConversionFactor.setText("1");
+            }
+        });
+
         btnSave.addActionListener(e -> handleSave());
         btnClose.addActionListener(e -> dispose());
     }
@@ -403,6 +433,8 @@ public class ItemManagementForm extends JFrame {
     private void displayItemDetails(ItemMaster item) {
         txtBarcode.setText(item.getBarcode());
         txtItemName.setText(item.getItemName());
+        String unitType = item.getUnitType();
+        cmbUnitType.setSelectedItem("COUNT".equals(unitType) ? "COUNT (عددي)" : "WEIGHT".equals(unitType) ? "WEIGHT (وزني)" : unitType);
         cmbUom.setSelectedItem(item.getUom());
         txtConversionFactor.setText(String.valueOf(item.getConversionFactor()));
         txtMinStockLevel.setText(String.valueOf(item.getMinStockLevel()));
@@ -436,6 +468,7 @@ public class ItemManagementForm extends JFrame {
                 name,
                 (String) cmbItemType.getSelectedItem(),
                 (String) cmbUom.getSelectedItem(),
+                ((String) cmbUnitType.getSelectedItem()).split(" ")[0],
                 Double.parseDouble(txtConversionFactor.getText().trim()),
                 Double.parseDouble(txtMinStockLevel.getText().trim()),
                 txtExpiryDate.getText().trim(),
@@ -464,11 +497,11 @@ public class ItemManagementForm extends JFrame {
     }
 
     private void saveItemToDatabase(ItemMaster item) throws Exception {
-        String sql = "INSERT INTO inventory_items (item_code, item_name, category, unit, default_sale_price, unit_cost, "
+        String sql = "INSERT INTO inventory_items (item_code, item_name, category, unit, unit_type, default_sale_price, unit_cost, "
                 + "current_stock, inventory_account, sales_revenue_account, cogs_account, conversion_factor, "
-                + "min_stock_level, expiry_date, batch_no) VALUES (?, ?, ?, ?, ?, ?, 0, ?, '410101', '510101', ?, ?, ?, ?) "
+                + "min_stock_level, expiry_date, batch_no) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, '410101', '510101', ?, ?, ?, ?) "
                 + "ON DUPLICATE KEY UPDATE item_name = VALUES(item_name), category = VALUES(category), unit = VALUES(unit), "
-                + "default_sale_price = VALUES(default_sale_price), unit_cost = VALUES(unit_cost), "
+                + "unit_type = VALUES(unit_type), default_sale_price = VALUES(default_sale_price), unit_cost = VALUES(unit_cost), "
                 + "inventory_account = VALUES(inventory_account), conversion_factor = VALUES(conversion_factor), "
                 + "min_stock_level = VALUES(min_stock_level), expiry_date = VALUES(expiry_date), batch_no = VALUES(batch_no)";
         try (Connection connection = DatabaseManager.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -476,13 +509,14 @@ public class ItemManagementForm extends JFrame {
             statement.setString(2, item.getItemName());
             statement.setString(3, item.getItemType());
             statement.setString(4, item.getUom());
-            statement.setDouble(5, item.getDefaultUnitPrice());
-            statement.setDouble(6, item.getUnitCost());
-            statement.setString(7, item.getBarcode());
-            statement.setDouble(8, item.getConversionFactor());
-            statement.setDouble(9, item.getMinStockLevel());
-            statement.setString(10, item.getExpiryDate());
-            statement.setString(11, item.getBatchNo());
+            statement.setString(5, item.getUnitType());
+            statement.setDouble(6, item.getDefaultUnitPrice());
+            statement.setDouble(7, item.getUnitCost());
+            statement.setString(8, item.getBarcode());
+            statement.setDouble(9, item.getConversionFactor());
+            statement.setDouble(10, item.getMinStockLevel());
+            statement.setString(11, item.getExpiryDate());
+            statement.setString(12, item.getBatchNo());
             statement.executeUpdate();
         }
     }

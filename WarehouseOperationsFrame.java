@@ -1,5 +1,9 @@
 import javax.swing.*;
 import java.awt.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
 
 public class WarehouseOperationsFrame extends JFrame {
@@ -33,6 +37,9 @@ public class WarehouseOperationsFrame extends JFrame {
         JTextField itemCode = new JTextField();
         JTextField itemName = new JTextField();
         JTextField quantity = new JTextField("0");
+        JTextField kgField = new JTextField("0");
+        JTextField gramField = new JTextField("0");
+        JComboBox<String> unitTypeCombo = new JComboBox<>(new String[]{"COUNT", "WEIGHT"});
         JTextField receiver = new JTextField();
         JTextField deliverer = new JTextField();
         JTextField narration = new JTextField();
@@ -41,7 +48,20 @@ public class WarehouseOperationsFrame extends JFrame {
         form.add(new JLabel("التاريخ:")); form.add(date);
         form.add(new JLabel("رقم الصنف:")); form.add(itemCode);
         form.add(new JLabel("اسم الصنف:")); form.add(itemName);
-        form.add(new JLabel("الكمية:")); form.add(quantity);
+        form.add(new JLabel("نوع الصنف:")); form.add(unitTypeCombo);
+        JPanel qtyPanel = new JPanel(new GridLayout(1, 3, 5, 5));
+        qtyPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        qtyPanel.add(new JLabel("الكمية (كرتون/عدد):"));
+        qtyPanel.add(quantity);
+        qtyPanel.add(new JLabel("كجم / غرام"));
+        JPanel weightPanel = new JPanel(new GridLayout(1, 4, 5, 5));
+        weightPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        weightPanel.add(new JLabel("الكيلو:"));
+        weightPanel.add(kgField);
+        weightPanel.add(new JLabel("الجرام:"));
+        weightPanel.add(gramField);
+        form.add(new JLabel("الكمية العددية/الكرتون:")); form.add(qtyPanel);
+        form.add(new JLabel("الأوزان (للأصناف الوزنية):")); form.add(weightPanel);
         form.add(new JLabel("اسم المستلم:")); form.add(receiver);
         form.add(new JLabel("اسم المسلم:")); form.add(deliverer);
         form.add(new JLabel("البيان:")); form.add(narration);
@@ -54,7 +74,14 @@ public class WarehouseOperationsFrame extends JFrame {
         JButton close = new JButton("إغلاق");
         approve.addActionListener(event -> {
             try {
-                double qty = Double.parseDouble(quantity.getText().trim());
+                double qty;
+                if ("WEIGHT".equals(unitTypeCombo.getSelectedItem())) {
+                    double kg = Double.parseDouble(kgField.getText().trim());
+                    double g = Double.parseDouble(gramField.getText().trim());
+                    qty = kg + (g / 1000.0);
+                } else {
+                    qty = Double.parseDouble(quantity.getText().trim());
+                }
                 if (qty <= 0 || itemCode.getText().trim().isEmpty() || itemName.getText().trim().isEmpty()) {
                     throw new IllegalArgumentException("رقم الصنف واسمه والكمية الموجبة مطلوبة.");
                 }

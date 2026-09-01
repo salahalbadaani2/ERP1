@@ -40,6 +40,9 @@ public class SalesReturnInvoiceForm extends JFrame {
     private JTextField txtReturnAmount;
     private JTextField txtInventoryCost;
     private JTextField txtReturnQuantity;
+    private JTextField txtKg;
+    private JTextField txtGram;
+    private JComboBox<String> cmbUnitType;
     private JTextField txtReturnItemCode;
     private JCheckBox chkApplyTax;
     private JComboBox<String> cmbTaxRate;
@@ -212,6 +215,15 @@ public class SalesReturnInvoiceForm extends JFrame {
         txtReturnAmount = new JTextField("500.00");
         txtInventoryCost = new JTextField("350.00");
         txtReturnQuantity = new JTextField("1");
+        cmbUnitType = new JComboBox<>(new String[]{"COUNT", "WEIGHT"});
+        JPanel kgGramPanel = new JPanel(new GridLayout(1, 4, 5, 5));
+        kgGramPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        kgGramPanel.add(new JLabel("الكيلو:"));
+        txtKg = new JTextField("0");
+        kgGramPanel.add(txtKg);
+        kgGramPanel.add(new JLabel("الجرام:"));
+        txtGram = new JTextField("0");
+        kgGramPanel.add(txtGram);
         txtReturnItemCode = new JTextField("ITEM-101");
         chkApplyTax = new JCheckBox("خاضع لضريبة المبيعات والقيمة المضافة", true);
         cmbTaxRate = new JComboBox<>(new String[]{"15% (النسبة القياسية)", "5% (السلع الأساسية)"});
@@ -235,6 +247,10 @@ public class SalesReturnInvoiceForm extends JFrame {
 
         panel.add(new JLabel("كمية المرتجع:"));
         panel.add(txtReturnQuantity);
+        panel.add(new JLabel("نوع الصنف:"));
+        panel.add(cmbUnitType);
+        panel.add(new JLabel("الكيلو/الجرام:"));
+        panel.add(kgGramPanel);
         panel.add(new JLabel("رقم صنف المرتجع:"));
         panel.add(txtReturnItemCode);
 
@@ -365,6 +381,8 @@ public class SalesReturnInvoiceForm extends JFrame {
             txtInvoiceCode.setText(DocumentNumberService.next("SALES_RETURN", "SRI-"));
             txtReturnAmount.setText("0.00");
             txtInventoryCost.setText("0.00");
+            txtKg.setText("0");
+            txtGram.setText("0");
             calculate();
         });
 
@@ -382,12 +400,20 @@ public class SalesReturnInvoiceForm extends JFrame {
 
     private void handlePostingToDatabase() {
         try {
+            double qty;
+            if ("WEIGHT".equals(cmbUnitType.getSelectedItem())) {
+                double kg = Double.parseDouble(txtKg.getText().trim());
+                double g = Double.parseDouble(txtGram.getText().trim());
+                qty = kg + (g / 1000.0);
+            } else {
+                qty = Double.parseDouble(txtReturnQuantity.getText().trim());
+            }
             SalesReturnInvoice invoice = buildInvoiceFromForm();
 
             // تنفيذ الترحيل المركزي
-                boolean success = SalesPostingService.postSalesReturn(invoice,
-                    Double.parseDouble(txtReturnQuantity.getText().trim()),
-                        txtReturnItemCode.getText().trim(), "منتج مرتجع");
+            boolean success = SalesPostingService.postSalesReturn(invoice,
+                qty,
+                    txtReturnItemCode.getText().trim(), "منتج مرتجع");
             if (success) {
                 JOptionPane.showMessageDialog(this,
                         "تم اعتماد وترحيل فاتورة مردودات المبيعات بنجاح.\n\n" +

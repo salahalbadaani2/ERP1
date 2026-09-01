@@ -1,5 +1,9 @@
 import javax.swing.*;
 import java.awt.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 public class VanWarehouseForm extends JFrame {
     private final JComboBox<String> movementType = new JComboBox<>(new String[]{"تحويل إلى مخزن المندوب", "إرجاع من مخزن المندوب"});
@@ -7,6 +11,9 @@ public class VanWarehouseForm extends JFrame {
     private final JTextField finishedGoodsAccount = new JTextField("1210301");
     private final JTextField vanAccount = new JTextField("1210401");
     private final JTextField quantity = new JTextField("0");
+    private final JTextField kgField = new JTextField("0");
+    private final JTextField gramField = new JTextField("0");
+    private final JComboBox<String> unitTypeCombo = new JComboBox<>(new String[]{"COUNT", "WEIGHT"});
     private final JTextField unitCost = new JTextField("0");
 
     public VanWarehouseForm() {

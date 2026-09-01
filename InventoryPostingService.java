@@ -92,7 +92,7 @@ public final class InventoryPostingService {
                                      String deliverer, String narration) throws SQLException {
         try (PreparedStatement create = connection.prepareStatement("CREATE TABLE IF NOT EXISTS inventory_movements ("
                 + "movement_id BIGINT AUTO_INCREMENT PRIMARY KEY, document_number VARCHAR(50), movement_type VARCHAR(20), "
-                + "item_code VARCHAR(50), item_name VARCHAR(255), quantity DECIMAL(15,2), unit_cost DECIMAL(15,2), "
+                 + "item_code VARCHAR(50), item_name VARCHAR(255), quantity DECIMAL(12,3), unit_cost DECIMAL(15,2), "
                 + "inventory_account VARCHAR(20), counter_account VARCHAR(20), receiver VARCHAR(255), deliverer VARCHAR(255), "
                 + "narration TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB")) {
             create.executeUpdate();

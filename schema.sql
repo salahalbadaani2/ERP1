@@ -43,6 +43,7 @@ CREATE TABLE `inventory_items` (
   `item_name` VARCHAR(255) NOT NULL COMMENT 'اسم الصنف التجاري/المصنعي',
   `category` VARCHAR(100) DEFAULT 'منتجات تامة' COMMENT 'تصنيف الصنف',
   `unit` VARCHAR(50) NOT NULL DEFAULT 'كرتون' COMMENT 'وحدة القياس',
+  `unit_type` VARCHAR(10) NOT NULL DEFAULT 'COUNT' COMMENT 'نوع الوحدة: COUNT (عددي) أو WEIGHT (وزني)',
   `default_sale_price` DECIMAL(15, 2) NOT NULL DEFAULT 0.00 COMMENT 'سعر البيع الافتراضي',
   `unit_cost` DECIMAL(15, 2) NOT NULL DEFAULT 0.00 COMMENT 'تكلفة الوحدة المعيارية',
   `current_stock` DECIMAL(15, 2) NOT NULL DEFAULT 0.00 COMMENT 'الرصيد المخزني الحالي',
@@ -93,7 +94,7 @@ CREATE TABLE `inventory_movements` (
   `movement_type` VARCHAR(20) NOT NULL COMMENT 'نوع الحركة (RECEIPT/ISSUE)',
   `item_code` VARCHAR(50) NOT NULL COMMENT 'كود الصنف',
   `item_name` VARCHAR(255) NOT NULL COMMENT 'اسم الصنف',
-  `quantity` DECIMAL(15,2) NOT NULL COMMENT 'الكمية',
+  `quantity` DECIMAL(12, 3) NOT NULL COMMENT 'الكمية',
   `unit_cost` DECIMAL(15,2) NOT NULL COMMENT 'تكلفة الوحدة',
   `inventory_account` VARCHAR(20) NOT NULL COMMENT 'حساب المخزون',
   `counter_account` VARCHAR(20) NOT NULL COMMENT 'الحساب المقابل',
@@ -146,6 +147,54 @@ CREATE TABLE `sales_return_notes` (
   `total_amount` DECIMAL(15, 2) NOT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- 5أ. جدول تفاصيل فواتير المبيعات (sales_invoice_details)
+-- ----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `sales_invoice_details`;
+CREATE TABLE `sales_invoice_details` (
+  `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `invoice_code` VARCHAR(50) NOT NULL,
+  `item_code` VARCHAR(50) NOT NULL,
+  `item_name` VARCHAR(255) NOT NULL,
+  `quantity` DECIMAL(12, 3) NOT NULL COMMENT 'الكمية (كيلو وجرام للمواد الوزنية)',
+  `unit_price` DECIMAL(15, 2) NOT NULL COMMENT 'سعر الوحدة',
+  `amount` DECIMAL(15, 2) NOT NULL COMMENT 'المبلغ',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_sid_invoice` (`invoice_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='تفاصيل فواتير المبيعات';
+
+-- ----------------------------------------------------------------------------
+-- 5ب. جدول تفاصيل فواتير المشتريات (purchase_invoice_details)
+-- ----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `purchase_invoice_details`;
+CREATE TABLE `purchase_invoice_details` (
+  `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `invoice_code` VARCHAR(50) NOT NULL,
+  `item_code` VARCHAR(50) NOT NULL,
+  `item_name` VARCHAR(255) NOT NULL,
+  `quantity` DECIMAL(12, 3) NOT NULL COMMENT 'الكمية (كيلو وجرام للمواد الوزنية)',
+  `unit_cost` DECIMAL(15, 2) NOT NULL COMMENT 'تكلفة الوحدة',
+  `amount` DECIMAL(15, 2) NOT NULL COMMENT 'المبلغ',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_pid_invoice` (`invoice_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='تفاصيل فواتير المشتريات';
+
+-- ----------------------------------------------------------------------------
+-- 5ج. جدول تفاصيل الإنتاج (production_details)
+-- ----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `production_details`;
+CREATE TABLE `production_details` (
+  `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `production_order` VARCHAR(50) NOT NULL,
+  `item_code` VARCHAR(50) NOT NULL,
+  `item_name` VARCHAR(255) NOT NULL,
+  `quantity` DECIMAL(12, 3) NOT NULL COMMENT 'الكمية المنتجة (كيلو وجرام للمواد الوزنية)',
+  `unit_cost` DECIMAL(15, 2) NOT NULL COMMENT 'تكلفة الوحدة',
+  `total_cost` DECIMAL(15, 2) NOT NULL COMMENT 'التكلفة الإجمالية',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_pd_order` (`production_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='تفاصيل أوامر الإنتاج';
 
 CREATE TABLE `purchase_invoices` (
   `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -256,10 +305,10 @@ INSERT INTO `chart_of_accounts` (`account_code`, `account_name`, `account_type`,
 ON DUPLICATE KEY UPDATE `account_name`=VALUES(`account_name`);
 
 -- إدخال بيانات تجريبية للأصناف المصنعية
-INSERT INTO `inventory_items` (`item_code`, `item_name`, `category`, `unit`, `default_sale_price`, `unit_cost`, `current_stock`, `inventory_account`, `sales_revenue_account`, `cogs_account`) VALUES
-('ITEM-101', 'عصير برتقال طبيعي 1 لتر - كرتون (12 عبوة)', 'عصائر ومنتجات تامة', 'كرتون', 250.00, 180.00, 1500.00, '1210301', '410101', '510101'),
-('ITEM-102', 'بسكويت ويفر محشو شوكولاتة (24 علبة)', 'بسكويت وحلويات', 'كرتون', 180.00, 120.00, 3200.00, '1210301', '410101', '510101'),
-('ITEM-103', 'مياه معدنية نقية 500 مل (24 قارورة)', 'مياه معبأة', 'كرتون', 80.00, 50.00, 5000.00, '1210301', '410101', '510101')
+INSERT INTO `inventory_items` (`item_code`, `item_name`, `category`, `unit`, `unit_type`, `default_sale_price`, `unit_cost`, `current_stock`, `inventory_account`, `sales_revenue_account`, `cogs_account`) VALUES
+('ITEM-101', 'عصير برتقال طبيعي 1 لتر - كرتون (12 عبوة)', 'عصائر ومنتجات تامة', 'كرتون', 'COUNT', 250.00, 180.00, 1500.00, '1210301', '410101', '510101'),
+('ITEM-102', 'بسكويت ويفر محشو شوكولاتة (24 علبة)', 'بسكويت وحلويات', 'كرتون', 'COUNT', 180.00, 120.00, 3200.00, '1210301', '410101', '510101'),
+('ITEM-103', 'مياه معدنية نقية 500 مل (24 قارورة)', 'مياه معبأة', 'كرتون', 'COUNT', 80.00, 50.00, 5000.00, '1210301', '410101', '510101')
 ON DUPLICATE KEY UPDATE `item_name`=VALUES(`item_name`);
 
 -- الحسابات التشغيلية الإضافية للمصانع الغذائية
