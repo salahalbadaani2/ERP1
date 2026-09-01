@@ -3,9 +3,12 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.sql.Connection;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import javax.imageio.ImageIO;
 
 /**
  * ============================================================================
@@ -28,6 +31,34 @@ public class MainWindow extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
         setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+
+        // تعيين أيقونة النافذة
+        BufferedImage icon = null;
+        try {
+            BufferedImage iconRes = ImageIO.read(getClass().getResource("/logo.png"));
+            if (iconRes != null) {
+                icon = iconRes;
+                setIconImage(icon);
+            } else {
+                // محاولة تحميل من مسار نسبي
+                BufferedImage icon2 = ImageIO.read(new java.io.File("logo.png"));
+                if (icon2 != null) {
+                    icon = icon2;
+                    setIconImage(icon2);
+                }
+            }
+        } catch (IOException e) {
+            // تجاهل الخطأ إذا تعذر تحميل الأيقونة
+            System.err.println("تعذر تحميل أيقونة النافذة: " + e.getMessage());
+        }
+
+        // تعيين أيقونة شريط المهام في نظام التشغيل (Windows Taskbar)
+        if (icon != null && java.awt.Taskbar.isTaskbarSupported()) {
+            java.awt.Taskbar taskbar = java.awt.Taskbar.getTaskbar();
+            if (taskbar.isSupported(java.awt.Taskbar.Feature.ICON_IMAGE)) {
+                taskbar.setIconImage(icon);
+            }
+        }
 
         DatabaseManager.initializeDatabase();
         DatabaseAutoMigration.run();

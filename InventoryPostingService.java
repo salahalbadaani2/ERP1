@@ -112,10 +112,10 @@ public final class InventoryPostingService {
             statement.setString(11, narration);
             statement.executeUpdate();
         }
-        try (PreparedStatement update = connection.prepareStatement("UPDATE inventory_items SET current_stock = current_stock + ?, unit_cost = CASE WHEN ? > 0 THEN (((current_stock - ?) * unit_cost) + (? * ?)) / current_stock ELSE unit_cost END WHERE item_code = ? AND current_stock + ? >= 0")) {
+        try (PreparedStatement update = connection.prepareStatement("UPDATE inventory_items SET current_stock = current_stock + ?, unit_cost = CASE WHEN current_stock > 0 THEN ((current_stock * unit_cost) + (? * ?)) / (current_stock + ?) ELSE ? END WHERE item_code = ? AND current_stock + ? >= 0")) {
             update.setDouble(1, quantity);
             update.setDouble(2, quantity);
-            update.setDouble(3, quantity);
+            update.setDouble(3, unitCost);
             update.setDouble(4, quantity);
             update.setDouble(5, unitCost);
             update.setString(6, itemCode);
