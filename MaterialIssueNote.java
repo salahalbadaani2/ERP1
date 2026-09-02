@@ -1,3 +1,9 @@
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import javax.swing.JOptionPane;
+
 public class MaterialIssueNote {
     private String noteCode;     // رقم إذن الصرف (مثلاً: IN-1001)
     private String itemCode;     // رقم الحساب الفرعي للصنف
@@ -28,8 +34,32 @@ public class MaterialIssueNote {
     public double getQuantity() { return quantity; }
     public String getNoteCode() { return noteCode; }
 
+    public boolean isPosted() {
+        String sql = "SELECT is_posted FROM material_issue_notes WHERE issue_code = ?";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, noteCode);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getBoolean("is_posted");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("خطأ في فحص حالة الإذن: " + e.getMessage());
+        }
+        return false;
+    }
+
     public boolean postToAccounting(String wipAccount, String rawMaterialAccount) {
-        return ManufacturingPostingService.postMaterialIssue(this, wipAccount, rawMaterialAccount);
+        if (isPosted()) {
+            JOptionPane.showMessageDialog(null, "المستند مرحل سابقاً ولا يمكن إعادة اعتماده", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        boolean success = ManufacturingPostingService.postMaterialIssue(this, wipAccount, rawMaterialAccount);
+        if (!success) {
+            JOptionPane.showMessageDialog(null, "المستند مرحل سابقاً ولا يمكن إعادة اعتماده", "تنبيه", JOptionPane.WARNING_MESSAGE);
+        }
+        return success;
     }
 
     // عرض تفاصيل إذن الصرف

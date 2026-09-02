@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import javax.swing.JOptionPane;
 
 /** الترحيل الموحد للمبيعات ومردوداتها مع حركة المخزون الآلية. */
 public final class SalesPostingService {
@@ -55,13 +56,13 @@ public final class SalesPostingService {
             return success;
         } catch (Exception e) {
             if (conn != null) {
-                try { conn.rollback(); } catch (Exception ignored) {}
+                try { conn.rollback(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             }
             System.err.println("فشل ترحيل فاتورة المبيعات: " + e.getMessage());
             return false;
         } finally {
             if (conn != null) {
-                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored) {}
+                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             }
         }
     }
@@ -116,7 +117,7 @@ public final class SalesPostingService {
                 }
             });
         } catch (Exception e) {
-            try { conn.rollback(); } catch (Exception ignored) {}
+            try { conn.rollback(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             throw new RuntimeException(e);
         }
     }
@@ -145,13 +146,13 @@ public final class SalesPostingService {
             return success;
         } catch (Exception e) {
             if (conn != null) {
-                try { conn.rollback(); } catch (Exception ignored) {}
+                try { conn.rollback(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             }
             System.err.println("فشل ترحيل مردودات المبيعات: " + e.getMessage());
             return false;
         } finally {
             if (conn != null) {
-                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored) {}
+                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             }
         }
     }
@@ -200,7 +201,7 @@ public final class SalesPostingService {
                 }
             });
         } catch (Exception e) {
-            try { conn.rollback(); } catch (Exception ignored) {}
+            try { conn.rollback(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             throw new RuntimeException(e);
         }
     }

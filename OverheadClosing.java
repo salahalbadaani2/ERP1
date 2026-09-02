@@ -1,6 +1,11 @@
 import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import javax.swing.JOptionPane;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -51,8 +56,32 @@ public class OverheadClosing {
     public double getAppliedAmount() { return appliedAmount; }
     public String getMonthPeriod() { return monthPeriod; }
 
+    public boolean isPosted() {
+        String sql = "SELECT is_posted FROM overhead_closings WHERE closing_code = ?";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, closingCode);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getBoolean("is_posted");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("خطأ في فحص حالة الإقفال: " + e.getMessage());
+        }
+        return false;
+    }
+
     public boolean postToAccounting() {
-        return ManufacturingPostingService.closeOverheadVariance(this);
+        if (isPosted()) {
+            JOptionPane.showMessageDialog(null, "المستند مرحل سابقاً ولا يمكن إعادة اعتماده", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        boolean success = ManufacturingPostingService.closeOverheadVariance(this);
+        if (!success) {
+            JOptionPane.showMessageDialog(null, "المستند مرحل سابقاً ولا يمكن إعادة اعتماده", "تنبيه", JOptionPane.WARNING_MESSAGE);
+        }
+        return success;
     }
 
     public void exportToTextFile() {

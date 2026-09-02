@@ -1,3 +1,9 @@
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import javax.swing.JOptionPane;
+
 public class GoodsReceiptNote {
     private String noteCode;       // رقم إذن التوريد (مثلاً: GRN-1001)
     private String rawItemCode;    // رقم حساب المواد الخام الفرعي (1210101)
@@ -31,8 +37,33 @@ public class GoodsReceiptNote {
     public String getVendorCode() { return vendorCode; }
     public double getQuantity() { return quantity; }
     public double getUnitPrice() { return unitPrice; }
+
+    public boolean isPosted() {
+        String sql = "SELECT is_posted FROM goods_receipt_notes WHERE grn_code = ?";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, noteCode);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getBoolean("is_posted");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("خطأ في فحص حالة الإذن: " + e.getMessage());
+        }
+        return false;
+    }
+
     public boolean postToAccounting() {
-        return ManufacturingPostingService.postGoodsReceipt(this);
+        if (isPosted()) {
+            JOptionPane.showMessageDialog(null, "المستند مرحل سابقاً ولا يمكن إعادة اعتماده", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        boolean success = ManufacturingPostingService.postGoodsReceipt(this);
+        if (!success) {
+            JOptionPane.showMessageDialog(null, "المستند مرحل سابقاً ولا يمكن إعادة اعتماده", "تنبيه", JOptionPane.WARNING_MESSAGE);
+        }
+        return success;
     }
 
     public void printNote() {

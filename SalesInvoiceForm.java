@@ -166,7 +166,10 @@ public class SalesInvoiceForm extends JFrame {
                                         tableModel.setValueAt(code, row, 3);
                                     }
                                 }
-                            } catch (Exception ignored) {}
+                            } catch (Exception ex) {
+                                ex.printStackTrace();
+                                JOptionPane.showMessageDialog(SalesInvoiceForm.this, ex.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
+                            }
                         }
                     }
                 }
@@ -248,7 +251,10 @@ public class SalesInvoiceForm extends JFrame {
                 tableModel.setValueAt(rs.getString("item_name"), 0, 2);
                 tableModel.setValueAt(rs.getString("unit_type"), 0, 4);
                 renumberRows(); calculateRowTotals();
-            }} } catch (SQLException ignored) {}
+            }}                     } catch (SQLException e) {
+                        e.printStackTrace();
+                        JOptionPane.showMessageDialog(this, e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
+                    }
     }
     private void calculateRowTotals() {
         double total = 0.0;
@@ -262,7 +268,10 @@ public class SalesInvoiceForm extends JFrame {
                 double totalVal = qty * price;
                 tableModel.setValueAt(String.format("%,.2f", totalVal), i, 8);
                 total += totalVal;
-            } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    JOptionPane.showMessageDialog(this, e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
+                }
         }
         txtBaseAmount.setText(String.format("%,.2f", total));
         double taxRate = parseDoubleSafe(txtTaxRate.getText());
@@ -344,5 +353,5 @@ public class SalesInvoiceForm extends JFrame {
     private void clearForm() {
         generateInvoiceNumber(); txtCustomerAccount.setText(""); txtBaseAmount.setText("0.00"); txtTotalAmount.setText("0.00"); txtGrandTotalAmount.setText("0.00"); txtTaxAmount.setText("0.00"); chkApplyTax.setSelected(false); txtTaxRate.setText("0.15"); txtTaxRate.setEnabled(false); while(tableModel.getRowCount()>0) tableModel.removeRow(0); calculateRowTotals();
     }
-    public static void main(String[] args) { SwingUtilities.invokeLater(() -> { try{ UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch(Exception ignored){} new SalesInvoiceForm().setVisible(true); }); }
+    public static void main(String[] args) { SwingUtilities.invokeLater(() -> { try{ UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch(Exception e){ e.printStackTrace(); JOptionPane.showMessageDialog(null, e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); } new SalesInvoiceForm().setVisible(true); }); }
 }

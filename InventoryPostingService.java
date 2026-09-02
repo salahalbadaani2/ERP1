@@ -2,6 +2,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import javax.swing.JOptionPane;
 
 public final class InventoryPostingService {
     private InventoryPostingService() {
@@ -87,16 +88,9 @@ public final class InventoryPostingService {
     }
 
     private static void saveMovement(Connection connection, String documentNumber, String type,
-                                     String itemCode, String itemName, double quantity, double unitCost,
-                                     String inventoryAccount, String counterAccount, String receiver,
-                                     String deliverer, String narration) throws SQLException {
-        try (PreparedStatement create = connection.prepareStatement("CREATE TABLE IF NOT EXISTS inventory_movements ("
-                + "movement_id BIGINT AUTO_INCREMENT PRIMARY KEY, document_number VARCHAR(50), movement_type VARCHAR(20), "
-                 + "item_code VARCHAR(50), item_name VARCHAR(255), quantity DECIMAL(12,3), unit_cost DECIMAL(15,2), "
-                + "inventory_account VARCHAR(20), counter_account VARCHAR(20), receiver VARCHAR(255), deliverer VARCHAR(255), "
-                + "narration TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB")) {
-            create.executeUpdate();
-        }
+                                      String itemCode, String itemName, double quantity, double unitCost,
+                                      String inventoryAccount, String counterAccount, String receiver,
+                                      String deliverer, String narration) throws SQLException {
         String insert = "INSERT INTO inventory_movements (document_number, movement_type, item_code, item_name, quantity, unit_cost, inventory_account, counter_account, receiver, deliverer, narration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(insert)) {
             statement.setString(1, documentNumber);
@@ -112,15 +106,24 @@ public final class InventoryPostingService {
             statement.setString(11, narration);
             statement.executeUpdate();
         }
-        try (PreparedStatement update = connection.prepareStatement("UPDATE inventory_items SET current_stock = current_stock + ?, unit_cost = CASE WHEN current_stock > 0 THEN ((current_stock * unit_cost) + (? * ?)) / (current_stock + ?) ELSE ? END WHERE item_code = ? AND current_stock + ? >= 0")) {
-            update.setDouble(1, quantity);
-            update.setDouble(2, quantity);
-            update.setDouble(3, unitCost);
-            update.setDouble(4, quantity);
-            update.setDouble(5, unitCost);
-            update.setString(6, itemCode);
-            update.setDouble(7, quantity);
-            if (update.executeUpdate() != 1) throw new SQLException("تعذر تحديث رصيد الصنف أو أن الرصيد غير كاف.");
+        if ("RECEIPT".equals(type)) {
+            try (PreparedStatement update = connection.prepareStatement("UPDATE inventory_items SET current_stock = current_stock + ?, unit_cost = CASE WHEN current_stock > 0 THEN ((current_stock * unit_cost) + (? * ?)) / (current_stock + ?) ELSE ? END WHERE item_code = ? AND current_stock + ? >= 0")) {
+                update.setDouble(1, quantity);
+                update.setDouble(2, quantity);
+                update.setDouble(3, unitCost);
+                update.setDouble(4, quantity);
+                update.setDouble(5, unitCost);
+                update.setString(6, itemCode);
+                update.setDouble(7, quantity);
+                if (update.executeUpdate() != 1) throw new SQLException("تعذر تحديث رصيد الصنف أو أن الرصيد غير كاف.");
+            }
+        } else {
+            try (PreparedStatement update = connection.prepareStatement("UPDATE inventory_items SET current_stock = current_stock + ? WHERE item_code = ? AND current_stock + ? >= 0")) {
+                update.setDouble(1, quantity);
+                update.setString(2, itemCode);
+                update.setDouble(3, quantity);
+                if (update.executeUpdate() != 1) throw new SQLException("تعذر تحديث رصيد الصنف أو أن الرصيد غير كاف.");
+            }
         }
     }
 

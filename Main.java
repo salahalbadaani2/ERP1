@@ -2,7 +2,7 @@ import javax.swing.*;
 
 public class Main {
     public static void main(String[] args) {
-        // تشغيل الواجهة الرئيسية عبر خيط Swing التزمني (EDT)
+        DatabaseManager.initializeDatabase();
         SwingUtilities.invokeLater(() -> {
             try {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());

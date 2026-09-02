@@ -77,7 +77,9 @@ public class DatabaseManager {
             // مسح الفهارس القديمة على عمود document_number في جدول حركات المخزون
             try {
                 stmt.executeUpdate("ALTER TABLE inventory_movements DROP INDEX document_number");
-            } catch (SQLException ignored) {}
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
 
             // جدول حركات المخزون (inventory_movements) - إنشاء تلقائي عند بداية التشغيل
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS inventory_movements ("
@@ -114,7 +116,9 @@ public class DatabaseManager {
                     "supplier_account VARCHAR(20), " +
                     "raw_material_account VARCHAR(20), " +
                     "total_amount DOUBLE, " +
+                    "is_posted TINYINT(1) NOT NULL DEFAULT 0, " +
                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            try { stmt.executeUpdate("ALTER TABLE goods_receipt_notes ADD COLUMN IF NOT EXISTS is_posted TINYINT(1) NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
 
             // 2. جدول صرف المواد للإنتاج (Material Issue)
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS material_issue_notes (" +
@@ -123,7 +127,9 @@ public class DatabaseManager {
                     "wip_account VARCHAR(20), " +
                     "raw_material_account VARCHAR(20), " +
                     "total_amount DOUBLE, " +
+                    "is_posted TINYINT(1) NOT NULL DEFAULT 0, " +
                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            try { stmt.executeUpdate("ALTER TABLE material_issue_notes ADD COLUMN IF NOT EXISTS is_posted TINYINT(1) NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
 
             // 3. جدول استلام المنتج التام (Finished Goods Receipt)
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS finished_goods_notes (" +
@@ -132,7 +138,9 @@ public class DatabaseManager {
                     "finished_goods_account VARCHAR(20), " +
                     "wip_account VARCHAR(20), " +
                     "total_amount DOUBLE, " +
+                    "is_posted TINYINT(1) NOT NULL DEFAULT 0, " +
                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            try { stmt.executeUpdate("ALTER TABLE finished_goods_notes ADD COLUMN IF NOT EXISTS is_posted TINYINT(1) NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
 
             // 4. جدول تحويلات سيارات التوزيع (Van Transfer)
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS van_transfer_notes (" +
@@ -179,7 +187,7 @@ public class DatabaseManager {
             stmt.executeUpdate("DELETE t1 FROM stock_alerts t1 INNER JOIN stock_alerts t2 WHERE t1.id > t2.id AND t1.item_code = t2.item_code");
             stmt.executeUpdate("ALTER TABLE stock_alerts ADD UNIQUE KEY uq_item_code (item_code)");
             } catch (SQLException e) {
-                // في حال كان القيد مُطبقاً مسبقاً يستمر التشغيل الطبيعي
+                e.printStackTrace();
             }
 
             // 7. جدول مرتجعات المبيعات (Sales Return)
@@ -224,7 +232,9 @@ public class DatabaseManager {
                     "actual_amount DOUBLE, " +
                     "applied_amount DOUBLE, " +
                     "month_year VARCHAR(20), " +
+                    "is_posted TINYINT(1) NOT NULL DEFAULT 0, " +
                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            try { stmt.executeUpdate("ALTER TABLE overhead_closings ADD COLUMN IF NOT EXISTS is_posted TINYINT(1) NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
 
             // 10. جدول سندات الخزينة والبنك (Treasury Vouchers)
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS treasury_vouchers (" +
@@ -255,7 +265,9 @@ public class DatabaseManager {
                 stmt.executeUpdate("UPDATE treasury_vouchers SET voucher_number = voucher_code WHERE voucher_number IS NULL");
                 stmt.executeUpdate("UPDATE treasury_vouchers SET reference_name = description WHERE reference_name IS NULL");
                 stmt.executeUpdate("UPDATE treasury_vouchers SET narration = description WHERE narration IS NULL");
-            } catch (SQLException ignored) {}
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
 
             // 11. جدول التنبيهات المخزنية (Stock Alerts)
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS stock_alerts (" +
@@ -650,15 +662,16 @@ public class DatabaseManager {
     private static void addTreasuryColumn(Statement stmt, String definition) {
         try {
             stmt.executeUpdate("ALTER TABLE treasury_vouchers ADD COLUMN " + definition);
-        } catch (SQLException ignored) {
-            // العمود موجود في الجداول المنشأة بالإصدار الحالي.
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
     }
 
     private static void addTableColumn(Statement stmt, String tableName, String definition) {
         try {
             stmt.executeUpdate("ALTER TABLE " + tableName + " ADD COLUMN " + definition);
-        } catch (SQLException ignored) {
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
     }
 }

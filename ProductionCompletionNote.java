@@ -1,3 +1,9 @@
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import javax.swing.JOptionPane;
+
 public class ProductionCompletionNote {
     private String noteCode;       // رقم إذن إضافة المنتج التام (مثلاً: PN-1001)
     private String wipItemCode;    // رقم حساب التشغيل (1210201)
@@ -29,8 +35,32 @@ public class ProductionCompletionNote {
     public double getUnitCost() { return unitCost; }
     public String getNoteCode() { return noteCode; }
 
+    public boolean isPosted() {
+        String sql = "SELECT is_posted FROM finished_goods_notes WHERE note_code = ?";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, noteCode);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getBoolean("is_posted");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("خطأ في فحص حالة الإذن: " + e.getMessage());
+        }
+        return false;
+    }
+
     public boolean postToAccounting() {
-        return ManufacturingPostingService.postFinishedGoods(this);
+        if (isPosted()) {
+            JOptionPane.showMessageDialog(null, "المستند مرحل سابقاً ولا يمكن إعادة اعتماده", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        boolean success = ManufacturingPostingService.postFinishedGoods(this);
+        if (!success) {
+            JOptionPane.showMessageDialog(null, "المستند مرحل سابقاً ولا يمكن إعادة اعتماده", "تنبيه", JOptionPane.WARNING_MESSAGE);
+        }
+        return success;
     }
 
     public void printNote() {

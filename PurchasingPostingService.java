@@ -164,7 +164,6 @@ public final class PurchasingPostingService {
     }
 
     private static void savePurchase(Connection connection, PurchaseInvoice invoice) throws SQLException {
-        createTables(connection);
         String sql = "INSERT INTO purchase_invoices (invoice_code, inventory_account, supplier_account, input_tax_account, amount, tax_amount, total_amount) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, invoice.getInvoiceCode());
@@ -179,7 +178,6 @@ public final class PurchasingPostingService {
     }
 
     private static void savePurchaseReturn(Connection connection, PurchaseReturnInvoice invoice) throws SQLException {
-        createTables(connection);
         String sql = "INSERT INTO purchase_return_invoices (return_code, inventory_account, supplier_account, input_tax_account, amount, tax_amount, total_amount) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, invoice.getInvoiceCode());
@@ -189,21 +187,6 @@ public final class PurchasingPostingService {
             statement.setDouble(5, invoice.getReturnAmount());
             statement.setDouble(6, invoice.getTaxAmount());
             statement.setDouble(7, invoice.getTotalVendorDebit());
-            statement.executeUpdate();
-        }
-    }
-
-    private static void createTables(Connection connection) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("CREATE TABLE IF NOT EXISTS purchase_invoices ("
-                + "id BIGINT AUTO_INCREMENT PRIMARY KEY, invoice_code VARCHAR(50) UNIQUE, inventory_account VARCHAR(20), "
-                + "supplier_account VARCHAR(20), input_tax_account VARCHAR(20), amount DECIMAL(18,4), tax_amount DECIMAL(18,4), "
-                + "total_amount DECIMAL(18,4), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB")) {
-            statement.executeUpdate();
-        }
-        try (PreparedStatement statement = connection.prepareStatement("CREATE TABLE IF NOT EXISTS purchase_return_invoices ("
-                + "id BIGINT AUTO_INCREMENT PRIMARY KEY, return_code VARCHAR(50) UNIQUE, inventory_account VARCHAR(20), "
-                + "supplier_account VARCHAR(20), input_tax_account VARCHAR(20), amount DECIMAL(18,4), tax_amount DECIMAL(18,4), "
-                + "total_amount DECIMAL(18,4), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB")) {
             statement.executeUpdate();
         }
     }

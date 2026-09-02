@@ -3,6 +3,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.sql.SQLException;
+import javax.swing.JOptionPane;
 
 /**
  * ============================================================================
@@ -36,14 +37,14 @@ public class PostingEngine {
             return postJournalEntryInternal(conn, entry, transactionWork);
         } catch (Exception e) {
             if (conn != null) {
-                try { conn.rollback(); } catch (Exception ignored) {}
+                try { conn.rollback(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             }
             System.err.println("فشل ترحيل القيد المحاسبي: " + e.getMessage());
             e.printStackTrace();
             return false;
         } finally {
             if (conn != null) {
-                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored) {}
+                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             }
         }
     }
@@ -145,7 +146,7 @@ public class PostingEngine {
             return true;
 
         } catch (Exception e) {
-            try { conn.rollback(); } catch (Exception ignored) {}
+            try { conn.rollback(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             System.err.println("فشل ترحيل القيد المحاسبي: " + e.getMessage());
             throw new RuntimeException(e);
         }
@@ -192,7 +193,7 @@ public class PostingEngine {
             // ترحيل القيد وتحديث الأرصدة داخل نفس الاتصال والمعاملة
             return postJournalEntry(conn, jv);
         } catch (Exception e) {
-            try { conn.rollback(); } catch (Exception ignored) {}
+            try { conn.rollback(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             System.err.println("فشل ترحيل مردودات المبيعات: " + e.getMessage());
             throw new RuntimeException(e);
         }
@@ -210,13 +211,13 @@ public class PostingEngine {
             return success;
         } catch (Exception e) {
             if (conn != null) {
-                try { conn.rollback(); } catch (Exception ignored) {}
+                try { conn.rollback(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             }
             System.err.println("فشل ترحيل مردودات المبيعات: " + e.getMessage());
             return false;
         } finally {
             if (conn != null) {
-                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored) {}
+                try { conn.setAutoCommit(true); conn.close(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             }
         }
     }
@@ -353,7 +354,7 @@ public class PostingEngine {
             return true;
 
         } catch (Exception e) {
-            try { conn.rollback(); } catch (Exception ignored) {}
+            try { conn.rollback(); } catch (Exception ignored2) { ignored2.printStackTrace(); JOptionPane.showMessageDialog(null, ignored2.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); }
             System.err.println("فشل ترحيل القيد المحاسبي: " + e.getMessage());
             throw new RuntimeException(e);
         }
