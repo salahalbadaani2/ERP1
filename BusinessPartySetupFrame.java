@@ -258,11 +258,13 @@ public class BusinessPartySetupFrame extends JFrame {
         imagesPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         imagesPanel.add(createImagePanel("صورة السجل التجاري:", false));
         imagesPanel.add(createImagePanel("صورة التفويض:", true));
+        gc.gridx = 0;
+        gc.gridy = row++;
         gc.gridwidth = 2;
-        gc.fill = GridBagConstraints.BOTH;
-        gc.weighty = 1.0;
-        form.add(imagesPanel, gc); row++;
+        gc.weightx = 1.0;
         gc.weighty = 0.0;
+        gc.fill = GridBagConstraints.HORIZONTAL;
+        form.add(imagesPanel, gc);
         gc.gridwidth = 1;
 
         panel.add(form, BorderLayout.CENTER);
