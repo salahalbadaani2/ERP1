@@ -6,6 +6,13 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
+import java.awt.print.PageFormat;
+import java.awt.print.Printable;
+import java.awt.print.PrinterException;
+import java.awt.print.PrinterJob;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -73,8 +80,8 @@ public class BusinessPartySetupFrame extends JFrame {
         this.cmbCurrency = new JComboBox<>(new String[]{"YER", "USD", "SAR", "EUR"});
         this.cmbPartyType = new JComboBox<>(new String[]{"supplier", "customer"});
         setTitle((("supplier".equals(type)) ? "الموردين" : "العملاء") + " - تهيئة وتكوين");
-        setSize(1100, 750);
-        setMinimumSize(new Dimension(900, 600));
+        setSize(1300, 900);
+        setMinimumSize(new Dimension(1100, 700));
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
@@ -97,17 +104,17 @@ public class BusinessPartySetupFrame extends JFrame {
         btnSave = createToolbarButton("حفظ", "icons/save.png");
         JButton btnEdit = createToolbarButton("تعديل", "icons/edit.png");
         JButton btnClose = createToolbarButton("إغلاق", "icons/close.png");
-        styleToolbarButton(btnNew, PRIMARY_COLOR, Color.WHITE);
-        styleToolbarButton(btnSave, PRIMARY_COLOR, Color.WHITE);
-        styleToolbarButton(btnEdit, SECONDARY_COLOR, Color.WHITE);
-        styleToolbarButton(btnClose, SECONDARY_COLOR, Color.WHITE);
+        styleToolbarButton(btnNew, new Color(147, 197, 253), Color.BLACK);
+        styleToolbarButton(btnSave, new Color(125, 211, 252), Color.BLACK);
+        styleToolbarButton(btnEdit, new Color(203, 213, 225), Color.BLACK);
+        styleToolbarButton(btnClose, new Color(226, 232, 240), Color.BLACK);
 
         toolbar.add(btnNew);
         toolbar.add(btnSave);
         toolbar.add(btnEdit);
         toolbar.add(Box.createHorizontalGlue());
         JLabel searchLabel = new JLabel("بحث:");
-        searchLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        searchLabel.setFont(new Font("Tahoma", Font.BOLD, 14));
         searchLabel.setForeground(TEXT_COLOR);
         toolbar.add(searchLabel);
         txtSearch = new JTextField(15);
@@ -124,7 +131,10 @@ public class BusinessPartySetupFrame extends JFrame {
         JPanel centerPanel = new JPanel(new BorderLayout(10, 10));
         centerPanel.setBackground(SCREEN_BACKGROUND);
         centerPanel.setBorder(new EmptyBorder(8, 12, 8, 12));
-        centerPanel.add(createSinglePagePanel(), BorderLayout.CENTER);
+        JScrollPane formScroll = new JScrollPane(createSinglePagePanel());
+        formScroll.setBorder(BorderFactory.createEmptyBorder());
+        formScroll.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        centerPanel.add(formScroll, BorderLayout.CENTER);
         add(centerPanel, BorderLayout.CENTER);
 
         btnNew.addActionListener(e -> newParty());
@@ -146,6 +156,7 @@ public class BusinessPartySetupFrame extends JFrame {
     }
 
     private void styleToolbarButton(JButton button, Color background, Color foreground) {
+        button.setFont(new Font("Tahoma", Font.BOLD, 14));
         button.setBackground(background);
         button.setForeground(foreground);
         button.setBorder(BorderFactory.createCompoundBorder(
@@ -153,10 +164,14 @@ public class BusinessPartySetupFrame extends JFrame {
     }
 
     private void styleField(JComponent field) {
-        field.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        field.setFont(new Font("Tahoma", Font.BOLD, 14));
+        field.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        if (field instanceof JTextField) {
+            ((JTextField) field).setHorizontalAlignment(JTextField.RIGHT);
+        }
         int width = field.getPreferredSize().width;
-        field.setPreferredSize(new Dimension(Math.max(width, 120), 32));
-        field.setMinimumSize(new Dimension(80, 32));
+        field.setPreferredSize(new Dimension(Math.max(width, 220), 32));
+        field.setMinimumSize(new Dimension(160, 32));
     }
 
     private JPanel createCardPanel(LayoutManager layout) {
@@ -209,7 +224,7 @@ public class BusinessPartySetupFrame extends JFrame {
 
         int row = 0;
         addLabelField(form, gc, row++, "كود الجهة:", txtCode = new JTextField(18));
-        addLabelField(form, gc, row++, "الاسم التجاري *:", txtArName = new JTextField(20));
+        txtArName = new JTextField(20);
 
         JPanel namePanel = new JPanel(new BorderLayout(8, 0));
         namePanel.setOpaque(false);
@@ -217,13 +232,14 @@ public class BusinessPartySetupFrame extends JFrame {
         namePanel.add(txtArName, BorderLayout.CENTER);
         JButton btnLookup = new JButton("بحث");
         styleToolbarButton(btnLookup, PRIMARY_COLOR, Color.WHITE);
-        btnLookup.addActionListener(e -> lookupPartyByName());
+        btnLookup.addActionListener(e -> {
+            JPopupMenu accountPopup = new JPopupMenu();
+            showPartySuggestions(accountPopup);
+        });
         namePanel.add(btnLookup, BorderLayout.EAST);
         addLabelField(form, gc, row++, "الاسم التجاري *:", namePanel);
 
         addLabelField(form, gc, row++, "اسم المالك:", txtOwnerName = new JTextField(20));
-        addLabelField(form, gc, row++, "اسم الحساب الفرعي:", txtSubAccount = new JTextField(18));
-        txtSubAccount.setEditable(false);
         addLabelField(form, gc, row++, "المدينة:", txtCity = new JTextField(20));
         addLabelField(form, gc, row++, "العنوان:", txtAddress = new JTextField(20));
         addLabelField(form, gc, row++, "رقم التواصل:", txtPhone = new JTextField(18));
@@ -232,32 +248,18 @@ public class BusinessPartySetupFrame extends JFrame {
         addLabelField(form, gc, row++, "اسم المفوض:", txtDelegateName = new JTextField(18));
         addLabelField(form, gc, row++, "الوظيفة:", txtDelegateJob = new JTextField(18));
 
-        JPanel delegateDocPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        delegateDocPanel.setOpaque(false);
-        delegateDocPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        delegateDocPanel.add(new JLabel("صورة التفويض:"));
-        txtDelegateDocPath = new JTextField(18);
-        delegateDocPanel.add(txtDelegateDocPath);
-        JButton btnBrowseDelegateDoc = new JButton("استعراض");
-        styleToolbarButton(btnBrowseDelegateDoc, SECONDARY_COLOR, Color.WHITE);
-        btnBrowseDelegateDoc.addActionListener(e -> browseDelegateDoc());
-        delegateDocPanel.add(btnBrowseDelegateDoc);
-        gc.gridwidth = 2;
-        form.add(delegateDocPanel, gc); row++;
-        gc.gridwidth = 1;
+        addLabelField(form, gc, row++, "رقم السجل التجاري:", txtCrNumber = new JTextField(18));
 
-        JPanel crPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        crPanel.setOpaque(false);
-        crPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        crPanel.add(new JLabel("السجل التجاري:"));
-        txtCrNumber = new JTextField(18);
-        crPanel.add(txtCrNumber);
-        JButton btnBrowseCr = new JButton("صورة السجل التجاري");
-        styleToolbarButton(btnBrowseCr, SECONDARY_COLOR, Color.WHITE);
-        btnBrowseCr.addActionListener(e -> browseCrImage());
-        crPanel.add(btnBrowseCr);
+        JPanel imagesPanel = new JPanel(new GridLayout(1, 2, 16, 0));
+        imagesPanel.setOpaque(false);
+        imagesPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        imagesPanel.add(createImagePanel("صورة السجل التجاري:", false));
+        imagesPanel.add(createImagePanel("صورة التفويض:", true));
         gc.gridwidth = 2;
-        form.add(crPanel, gc); row++;
+        gc.fill = GridBagConstraints.BOTH;
+        gc.weighty = 1.0;
+        form.add(imagesPanel, gc); row++;
+        gc.weighty = 0.0;
         gc.gridwidth = 1;
 
         panel.add(form, BorderLayout.CENTER);
@@ -269,7 +271,7 @@ public class BusinessPartySetupFrame extends JFrame {
         gc.gridy = row;
         gc.gridx = 0; gc.weightx = 0.0; gc.gridwidth = 1;
         JLabel lbl = new JLabel(label);
-        lbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        lbl.setFont(new Font("Tahoma", Font.BOLD, 14));
         lbl.setForeground(TEXT_COLOR);
         form.add(lbl, gc);
         gc.gridx = 1; gc.weightx = 1.0;
@@ -295,6 +297,173 @@ public class BusinessPartySetupFrame extends JFrame {
             public void removeUpdate(DocumentEvent e) { debounce.restart(); }
             public void changedUpdate(DocumentEvent e) { debounce.restart(); }
         });
+        txtArName.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() == 2) {
+                    openAccountTree();
+                }
+            }
+        });
+    }
+
+    private void openAccountTree() {
+        String prefix = "supplier".equals(partyType) ? "2" : "12";
+        AccountTreeDialog dialog = new AccountTreeDialog(this, prefix);
+        dialog.setVisible(true);
+        if (dialog.isAccountSelected()) {
+            String code = dialog.getSelectedAccountCode();
+            txtSubAccount.setText(code);
+            loadAccountName(code);
+        }
+    }
+
+    private void loadAccountName(String accountCode) {
+        String sql = "SELECT account_name FROM chart_of_accounts "
+                + "WHERE account_code = ? AND is_sub_account = 1";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, accountCode);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    txtArName.setText(rs.getString("account_name"));
+                }
+            }
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "فشل جلب اسم الحساب: " + ex.getMessage(),
+                    "خطأ", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private JPanel createImagePanel(String label, boolean authorization) {
+        JPanel panel = new JPanel(new BorderLayout(8, 4));
+        panel.setOpaque(false);
+        panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        panel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(CARD_BORDER),
+                new EmptyBorder(6, 8, 6, 8)));
+        JLabel title = new JLabel(label);
+        title.setFont(new Font("Tahoma", Font.BOLD, 14));
+        panel.add(title, BorderLayout.NORTH);
+
+        JTextField pathField;
+        if (authorization) {
+            txtDelegateDocPath = new JTextField(18);
+            pathField = txtDelegateDocPath;
+        } else {
+            txtCrImagePath = new JTextField(18);
+            pathField = txtCrImagePath;
+        }
+        pathField.setEditable(false);
+        styleField(pathField);
+        JPanel actions = new JPanel(new BorderLayout(8, 0));
+        actions.setOpaque(false);
+        actions.add(pathField, BorderLayout.CENTER);
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        buttons.setOpaque(false);
+
+        JButton choose = new JButton("اختيار...");
+        styleToolbarButton(choose, PRIMARY_COLOR, Color.WHITE);
+        choose.addActionListener(e -> chooseImage(pathField, label));
+        buttons.add(choose);
+
+        JButton view = new JButton("عرض");
+        styleToolbarButton(view, SECONDARY_COLOR, Color.WHITE);
+        view.addActionListener(e -> previewImage(pathField.getText().trim(), label));
+        buttons.add(view);
+
+        JButton print = new JButton("طباعة");
+        styleToolbarButton(print, SECONDARY_COLOR, Color.WHITE);
+        print.addActionListener(e -> printImage(pathField.getText().trim(), label));
+        buttons.add(print);
+        actions.add(buttons, BorderLayout.EAST);
+        panel.add(actions, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private void chooseImage(JTextField pathField, String title) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("اختيار " + title);
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File source = chooser.getSelectedFile();
+        try {
+            BufferedImage image = ImageIO.read(source);
+            if (image == null) {
+                throw new IllegalArgumentException("الملف المحدد ليس صورة قابلة للقراءة");
+            }
+            Path uploads = new File("uploads").toPath();
+            Files.createDirectories(uploads);
+            String safeName = System.currentTimeMillis() + "_" + source.getName().replaceAll("[^a-zA-Z0-9._-]", "_");
+            Path destination = uploads.resolve(safeName);
+            Files.copy(source.toPath(), destination, StandardCopyOption.REPLACE_EXISTING);
+            pathField.setText(destination.toString());
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "فشل حفظ الصورة: " + ex.getMessage(),
+                    "خطأ", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void previewImage(String imagePath, String title) {
+        if (imagePath.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "لم يتم اختيار صورة", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        try {
+            BufferedImage image = ImageIO.read(new File(imagePath));
+            if (image == null) {
+                throw new IllegalArgumentException("تعذر قراءة الصورة");
+            }
+            int width = Math.min(800, Math.max(300, image.getWidth()));
+            int height = Math.min(600, Math.max(200, image.getHeight()));
+            double scale = Math.min((double) width / image.getWidth(), (double) height / image.getHeight());
+            Image scaled = image.getScaledInstance((int) (image.getWidth() * scale),
+                    (int) (image.getHeight() * scale), Image.SCALE_SMOOTH);
+            JDialog dialog = new JDialog(this, title, true);
+            dialog.add(new JScrollPane(new JLabel(new ImageIcon(scaled))));
+            dialog.setSize(width + 40, height + 60);
+            dialog.setLocationRelativeTo(this);
+            dialog.setVisible(true);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "فشل عرض الصورة: " + ex.getMessage(),
+                    "خطأ", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void printImage(String imagePath, String title) {
+        if (imagePath.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "لم يتم اختيار صورة", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        try {
+            BufferedImage image = ImageIO.read(new File(imagePath));
+            if (image == null) {
+                throw new IllegalArgumentException("تعذر قراءة الصورة");
+            }
+            PrinterJob job = PrinterJob.getPrinterJob();
+            job.setJobName(title);
+            job.setPrintable((graphics, pageFormat, pageIndex) -> {
+                if (pageIndex > 0) return Printable.NO_SUCH_PAGE;
+                double scale = Math.min(
+                        (pageFormat.getImageableWidth() - 10) / image.getWidth(),
+                        (pageFormat.getImageableHeight() - 10) / image.getHeight());
+                int width = (int) (image.getWidth() * scale);
+                int height = (int) (image.getHeight() * scale);
+                graphics.drawImage(image, (int) pageFormat.getImageableX(),
+                        (int) pageFormat.getImageableY(), width, height, null);
+                return Printable.PAGE_EXISTS;
+            });
+            if (job.printDialog()) {
+                job.print();
+            }
+        } catch (PrinterException | RuntimeException ex) {
+            JOptionPane.showMessageDialog(this, "فشل طباعة الصورة: " + ex.getMessage(),
+                    "خطأ", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "فشل قراءة الصورة: " + ex.getMessage(),
+                    "خطأ", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void lookupPartyByName() {
@@ -325,30 +494,38 @@ public class BusinessPartySetupFrame extends JFrame {
     private void showPartySuggestions(JPopupMenu popup) {
         String value = txtArName.getText().trim();
         if (value.isEmpty()) { popup.setVisible(false); return; }
-        String sql = "SELECT code, ar_name FROM business_parties WHERE party_type = ? AND ar_name LIKE ? ORDER BY ar_name LIMIT 8";
+        String accountType = "supplier".equals(partyType) ? "LIABILITY" : "ASSET";
+        String sql = "SELECT account_code, account_name FROM chart_of_accounts "
+                + "WHERE is_sub_account = 1 AND account_type = ? "
+                + "AND (account_code LIKE ? OR account_name LIKE ?) "
+                + "ORDER BY account_name LIMIT 8";
         try (Connection conn = DatabaseManager.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, partyType);
+            ps.setString(1, accountType);
             ps.setString(2, "%" + value + "%");
+            ps.setString(3, "%" + value + "%");
             try (ResultSet rs = ps.executeQuery()) {
                 java.util.List<String> options = new java.util.ArrayList<>();
                 while (rs.next()) {
-                    options.add(rs.getString("code") + " - " + rs.getString("ar_name"));
+                    options.add(rs.getString("account_code") + " - " + rs.getString("account_name"));
                 }
                 if (options.isEmpty()) { popup.setVisible(false); return; }
                 popup.removeAll();
                 for (String option : options) {
                     JMenuItem item = new JMenuItem(option);
                     item.addActionListener(ev -> {
-                        String code = option.split(" - ")[0];
-                        loadPartyByCode(code);
+                        String[] parts = option.split(" - ", 2);
+                        txtSubAccount.setText(parts[0]);
+                        txtArName.setText(parts.length > 1 ? parts[1] : "");
                         popup.setVisible(false);
                     });
                     popup.add(item);
                 }
-                popup.show(txtArName, 0, txtArName.getHeight());
+                    popup.show(txtArName, 0, txtArName.getHeight());
             }
-        } catch (SQLException ignored) {
+        } catch (SQLException ex) {
             popup.setVisible(false);
+                JOptionPane.showMessageDialog(this, "فشل البحث في شجرة الحسابات: " + ex.getMessage(),
+                        "خطأ", JOptionPane.ERROR_MESSAGE);
         }
     }
 
