@@ -17,6 +17,11 @@ import java.awt.image.BufferedImage;
 
 public class BusinessPartySetupFrame extends JFrame {
     private static final long serialVersionUID = 1L;
+    private static final Color SCREEN_BACKGROUND = new Color(244, 246, 249);
+    private static final Color CARD_BORDER = new Color(226, 232, 240);
+    private static final Color TEXT_COLOR = new Color(30, 41, 59);
+    private static final Color PRIMARY_COLOR = new Color(2, 132, 199);
+    private static final Color SECONDARY_COLOR = new Color(100, 116, 139);
     private String partyType = "supplier";
     private String editCode = null;
     private boolean isEditMode = false;
@@ -46,16 +51,16 @@ public class BusinessPartySetupFrame extends JFrame {
     }
 
     private void initUI() {
-        setLayout(new BorderLayout());
+        getContentPane().setBackground(SCREEN_BACKGROUND);
+        setLayout(new BorderLayout(0, 10));
 
         // =========================================================================
         // شريط الأدوات العلوي (Toolbar)
         // =========================================================================
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 6));
-        toolbar.setBackground(new Color(245, 247, 250));
-        toolbar.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(200, 205, 215)),
-                new EmptyBorder(5, 8, 5, 8)));
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 9));
+        toolbar.setBackground(Color.WHITE);
+        toolbar.setPreferredSize(new Dimension(0, 50));
+        toolbar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, CARD_BORDER));
         toolbar.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
 
         btnNew = createToolbarButton("جديد", "icons/add.png");
@@ -65,6 +70,13 @@ public class BusinessPartySetupFrame extends JFrame {
         JButton btnClear = createToolbarButton("مسح", "icons/clear.png");
         JButton btnReport = createToolbarButton("تقرير", "icons/report.png");
         JButton btnClose = createToolbarButton("إغلاق", "icons/close.png");
+        styleToolbarButton(btnNew, PRIMARY_COLOR, Color.WHITE);
+        styleToolbarButton(btnSave, PRIMARY_COLOR, Color.WHITE);
+        styleToolbarButton(btnEdit, SECONDARY_COLOR, Color.WHITE);
+        styleToolbarButton(btnDelete, SECONDARY_COLOR, Color.WHITE);
+        styleToolbarButton(btnClear, SECONDARY_COLOR, Color.WHITE);
+        styleToolbarButton(btnReport, SECONDARY_COLOR, Color.WHITE);
+        styleToolbarButton(btnClose, SECONDARY_COLOR, Color.WHITE);
 
         toolbar.add(btnNew);
         toolbar.add(btnSave);
@@ -72,8 +84,12 @@ public class BusinessPartySetupFrame extends JFrame {
         toolbar.add(btnDelete);
         toolbar.add(btnClear);
         toolbar.add(Box.createHorizontalGlue());
-        toolbar.add(new JLabel("بحث:"));
+        JLabel searchLabel = new JLabel("بحث:");
+        searchLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        searchLabel.setForeground(TEXT_COLOR);
+        toolbar.add(searchLabel);
         txtSearch = new JTextField(15);
+        styleField(txtSearch);
         txtSearch.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { filterPartyList(); }
             public void removeUpdate(DocumentEvent e) { filterPartyList(); }
@@ -92,6 +108,7 @@ public class BusinessPartySetupFrame extends JFrame {
         tabs.addTab("البيانات العامة", createGeneralTab());
         tabs.addTab("المالية والضريبية", createFinancialTab());
         tabs.addTab("المفوضين", createDelegatesTab());
+        tabs.setBorder(new EmptyBorder(0, 12, 0, 12));
         add(tabs, BorderLayout.CENTER);
 
         // =========================================================================
@@ -103,14 +120,23 @@ public class BusinessPartySetupFrame extends JFrame {
         };
         partyTable = new JTable(partyModel);
         partyTable.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        partyTable.setRowHeight(22);
+        styleTable(partyTable);
         partyTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) loadSelectedParty();
         });
         JScrollPane scrollParty = new JScrollPane(partyTable);
         scrollParty.setBorder(BorderFactory.createTitledBorder(
                 "قائمة " + (("supplier".equals(partyType)) ? "الموردين" : "العملاء")));
-        add(scrollParty, BorderLayout.SOUTH);
+        JPanel tableCard = createCardPanel(new BorderLayout());
+        tableCard.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(CARD_BORDER, 8), new EmptyBorder(8, 10, 10, 10)));
+        JLabel tableTitle = new JLabel("قائمة " + (("supplier".equals(partyType)) ? "الموردين" : "العملاء"));
+        tableTitle.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        tableTitle.setForeground(TEXT_COLOR);
+        tableCard.add(tableTitle, BorderLayout.NORTH);
+        tableCard.add(scrollParty, BorderLayout.CENTER);
+        tableCard.setPreferredSize(new Dimension(0, 190));
+        add(tableCard, BorderLayout.SOUTH);
 
         // أزرار التبويب
         btnNew.addActionListener(e -> newParty());
@@ -124,13 +150,62 @@ public class BusinessPartySetupFrame extends JFrame {
 
     private JButton createToolbarButton(String text, String iconPath) {
         JButton btn = new JButton(text);
-        btn.setFont(new Font("Tahoma", Font.PLAIN, 11));
+        btn.setFont(new Font("Segoe UI", Font.BOLD, 12));
         btn.setFocusPainted(false);
+        btn.setPreferredSize(new Dimension(82, 32));
         try {
             BufferedImage img = ImageIO.read(new File(iconPath));
             if (img != null) btn.setIcon(new ImageIcon(img.getScaledInstance(18, 18, Image.SCALE_SMOOTH)));
         } catch (Exception ignored) {}
         return btn;
+    }
+
+    private void styleToolbarButton(JButton button, Color background, Color foreground) {
+        button.setBackground(background);
+        button.setForeground(foreground);
+        button.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(background.darker(), 6), new EmptyBorder(4, 10, 4, 10)));
+    }
+
+    private void styleField(JComponent field) {
+        field.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        int width = field.getPreferredSize().width;
+        field.setPreferredSize(new Dimension(Math.max(width, 120), 32));
+        field.setMinimumSize(new Dimension(80, 32));
+    }
+
+    private JPanel createCardPanel(LayoutManager layout) {
+        JPanel card = new JPanel(layout);
+        card.setBackground(Color.WHITE);
+        card.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(CARD_BORDER, 8), new EmptyBorder(14, 16, 14, 16)));
+        card.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        return card;
+    }
+
+    private void styleTable(JTable table) {
+        table.setRowHeight(30);
+        table.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        table.setForeground(TEXT_COLOR);
+        table.setGridColor(CARD_BORDER);
+        table.setShowHorizontalLines(true);
+        table.setShowVerticalLines(false);
+        table.setIntercellSpacing(new Dimension(0, 1));
+        table.getTableHeader().setPreferredSize(new Dimension(0, 34));
+        table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
+        table.getTableHeader().setForeground(Color.WHITE);
+        table.getTableHeader().setBackground(new Color(15, 23, 42));
+        table.getTableHeader().setOpaque(true);
+        table.setDefaultRenderer(Object.class, new javax.swing.table.DefaultTableCellRenderer() {
+            @Override public Component getTableCellRendererComponent(JTable t, Object value, boolean selected,
+                    boolean focused, int row, int column) {
+                Component c = super.getTableCellRendererComponent(t, value, selected, focused, row, column);
+                c.setBackground(selected ? new Color(219, 234, 254) : (row % 2 == 0 ? Color.WHITE : new Color(248, 250, 252)));
+                c.setForeground(TEXT_COLOR);
+                setBorder(new EmptyBorder(0, 8, 0, 8));
+                return c;
+            }
+        });
     }
 
     // =========================================================================
@@ -139,56 +214,56 @@ public class BusinessPartySetupFrame extends JFrame {
     private JPanel createGeneralTab() {
         JPanel panel = new JPanel(new BorderLayout(8, 8));
         panel.setBorder(new EmptyBorder(8, 12, 8, 12));
+        panel.setBackground(SCREEN_BACKGROUND);
         panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
 
-        JPanel form = new JPanel(new GridBagLayout());
+        JPanel form = createCardPanel(new GridBagLayout());
         form.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        form.setBackground(Color.WHITE);
         GridBagConstraints gc = new GridBagConstraints();
         gc.fill = GridBagConstraints.HORIZONTAL;
-        gc.insets = new Insets(3, 6, 3, 6);
-        gc.weightx = 1.0;
+        gc.insets = new Insets(8, 12, 8, 12);
 
         int row = 0;
-        // صف 1: الكود + الاسم العربي
-        gc.gridx = 0; gc.gridwidth = 1; addLabelField(form, gc, row, "كود الجهة:", txtCode = new JTextField(18)); gc.gridx = 2; gc.gridwidth = 1; addLabelField(form, gc, row, "الاسم التجاري *:", txtArName = new JTextField(20)); row++;
-        // صف 2: الاسم الإنجليزي + نوع الجهة
-        gc.gridx = 0; addLabelField(form, gc, row, "الاسم الإنجليزي:", txtEnName = new JTextField(18)); gc.gridx = 2; addLabelField(form, gc, row, "نوع الجهة:", createPartyTypeCombo()); row++;
-        // صف 3: الحالة + صاحب الجهة
-        gc.gridx = 0; addLabelField(form, gc, row, "الحالة:", cmbStatus = new JComboBox<>(new String[]{"active", "suspended"})); gc.gridx = 2; addLabelField(form, gc, row, "صاحب الجهة:", txtOwnerName = new JTextField(20)); row++;
+        addLabelField(form, gc, row++, "كود الجهة:", txtCode = new JTextField(18));
+        addLabelField(form, gc, row++, "الاسم التجاري *:", txtArName = new JTextField(20));
+        addLabelField(form, gc, row++, "الاسم الإنجليزي:", txtEnName = new JTextField(18));
+        addLabelField(form, gc, row++, "نوع الجهة:", createPartyTypeCombo());
+        addLabelField(form, gc, row++, "الحالة:", cmbStatus = new JComboBox<>(new String[]{"active", "suspended"}));
+        addLabelField(form, gc, row++, "صاحب الجهة:", txtOwnerName = new JTextField(20));
         // صف 4: الحساب الأب + الحساب الفرعي
         JPanel parentPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         parentPanel.setOpaque(false); parentPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        parentPanel.add(new JLabel("الحساب الأب:"));
-        txtParentAccount = new JTextField(12); txtParentAccount.setEditable(false);
+        txtParentAccount = new JTextField(12); txtParentAccount.setEditable(false); styleField(txtParentAccount);
         parentPanel.add(txtParentAccount);
         btnBrowseParent = new JButton("استعراض");
-        btnBrowseParent.setFont(new Font("Tahoma", Font.PLAIN, 10));
+        styleToolbarButton(btnBrowseParent, SECONDARY_COLOR, Color.WHITE);
         btnBrowseParent.addActionListener(e -> browseParentAccount());
         parentPanel.add(btnBrowseParent);
         JPanel subPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         subPanel.setOpaque(false); subPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        subPanel.add(new JLabel("الحساب الفرعي:*"));
-        txtSubAccount = new JTextField(12); txtSubAccount.setEditable(false);
+        txtSubAccount = new JTextField(12); txtSubAccount.setEditable(false); styleField(txtSubAccount);
         subPanel.add(txtSubAccount);
-        gc.gridx = 0; gc.gridwidth = 2; form.add(parentPanel, gc); row++;
-        gc.gridx = 0; gc.gridwidth = 2; form.add(subPanel, gc); row++;
-        // صف 6: الهاتف + الجوال
-        gc.gridx = 0; addLabelField(form, gc, row, "الهاتف:", txtPhone = new JTextField(18)); gc.gridx = 2; addLabelField(form, gc, row, "الجوال:", txtMobile = new JTextField(18)); row++;
-        // صف 7: الإيميل + العنوان
-        gc.gridx = 0; addLabelField(form, gc, row, "الإيميل:", txtEmail = new JTextField(18)); gc.gridx = 2; addLabelField(form, gc, row, "العنوان:", txtAddress = new JTextField(20)); row++;
-        gc.gridx = 0; gc.gridwidth = 2; addLabelField(form, gc, row, "جهة الاتصال:", txtContactPerson = new JTextField(18)); row++;
+        addLabelField(form, gc, row++, "الحساب الأب:", parentPanel);
+        addLabelField(form, gc, row++, "الحساب الفرعي *:", subPanel);
+        addLabelField(form, gc, row++, "الهاتف:", txtPhone = new JTextField(18));
+        addLabelField(form, gc, row++, "الجوال:", txtMobile = new JTextField(18));
+        addLabelField(form, gc, row++, "الإيميل:", txtEmail = new JTextField(18));
+        addLabelField(form, gc, row++, "العنوان:", txtAddress = new JTextField(20));
+        addLabelField(form, gc, row++, "جهة الاتصال:", txtContactPerson = new JTextField(18));
 
         panel.add(form, BorderLayout.CENTER);
         return panel;
     }
 
     private void addLabelField(JPanel form, GridBagConstraints gc, int row, String label, JComponent field) {
-        gc.gridx = 0; gc.gridwidth = 1; gc.gridy = row;
+        gc.gridy = row;
+        gc.gridx = 0; gc.weightx = 0.0; gc.gridwidth = 1;
         JLabel lbl = new JLabel(label);
-        lbl.setFont(new Font("Tahoma", Font.PLAIN, 11));
+        lbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        lbl.setForeground(TEXT_COLOR);
         form.add(lbl, gc);
-        gc.gridx = 1; gc.gridwidth = 1;
+        gc.gridx = 1; gc.weightx = 1.0;
+        styleField(field);
         form.add(field, gc);
     }
 
@@ -205,28 +280,27 @@ public class BusinessPartySetupFrame extends JFrame {
     // التبويب الثاني: المالية والضريبية
     // =========================================================================
     private JPanel createFinancialTab() {
-        JPanel panel = new JPanel(new GridBagLayout());
+        JPanel panel = createCardPanel(new GridBagLayout());
         panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        panel.setBackground(Color.WHITE);
-        panel.setBorder(new EmptyBorder(10, 20, 10, 20));
         GridBagConstraints gc = new GridBagConstraints();
         gc.fill = GridBagConstraints.HORIZONTAL;
-        gc.insets = new Insets(5, 10, 5, 10);
-        gc.weightx = 1.0;
+        gc.insets = new Insets(8, 12, 8, 12);
 
         int row = 0;
-        gc.gridwidth = 2; addLabelField2(panel, gc, row, "سقف الائتمان:", txtCreditLimit = new JTextField(14)); row++;
-        gc.gridwidth = 2; addLabelField2(panel, gc, row, "فترة السداد (أيام):", txtCreditPeriod = new JTextField(10)); row++;
-        gc.gridwidth = 2; addLabelField2(panel, gc, row, "العملة:", cmbCurrency = new JComboBox<>(new String[]{"YER", "USD", "SAR", "EUR"})); row++;
-        gc.gridwidth = 2; addLabelField2(panel, gc, row, "الرصيد الافتتاحي:", txtOpeningBalance = new JTextField(12)); row++;
-        gc.gridwidth = 2; addLabelField2(panel, gc, row, "نوع الرصيد:", cmbBalanceType = new JComboBox<>(new String[]{"debit", "credit"})); row++;
-        gc.gridwidth = 2; addLabelField2(panel, gc, row, "الرقم الضريبي (ضريبة القيمة المضافة):", txtVatNumber = new JTextField(18)); row++;
-        gc.gridwidth = 2; addLabelField2(panel, gc, row, "السجل التجاري:", txtCrNumber = new JTextField(20)); row++;
+        addLabelField2(panel, gc, row++, "سقف الائتمان:", txtCreditLimit = new JTextField(14));
+        addLabelField2(panel, gc, row++, "فترة السداد (أيام):", txtCreditPeriod = new JTextField(10));
+        addLabelField2(panel, gc, row++, "العملة:", cmbCurrency = new JComboBox<>(new String[]{"YER", "USD", "SAR", "EUR"}));
+        addLabelField2(panel, gc, row++, "الرصيد الافتتاحي:", txtOpeningBalance = new JTextField(12));
+        addLabelField2(panel, gc, row++, "نوع الرصيد:", cmbBalanceType = new JComboBox<>(new String[]{"debit", "credit"}));
+        addLabelField2(panel, gc, row++, "الرقم الضريبي (ضريبة القيمة المضافة):", txtVatNumber = new JTextField(18));
+        addLabelField2(panel, gc, row++, "السجل التجاري:", txtCrNumber = new JTextField(20));
         JPanel crImgPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         crImgPanel.setOpaque(false); crImgPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         crImgPanel.add(new JLabel("مسار صورة السجل التجاري:"));
         crImgPanel.add(txtCrImagePath = new JTextField(15));
+        styleField(txtCrImagePath);
         btnBrowseCrImage = new JButton("استعراض");
+        styleToolbarButton(btnBrowseCrImage, SECONDARY_COLOR, Color.WHITE);
         btnBrowseCrImage.addActionListener(e -> browseCrImage());
         crImgPanel.add(btnBrowseCrImage);
         gc.gridwidth = 2; panel.add(crImgPanel, gc); row++;
@@ -235,12 +309,7 @@ public class BusinessPartySetupFrame extends JFrame {
     }
 
     private void addLabelField2(JPanel form, GridBagConstraints gc, int row, String label, JComponent field) {
-        gc.gridx = 0; gc.gridwidth = 1; gc.gridy = row;
-        JLabel lbl = new JLabel(label);
-        lbl.setFont(new Font("Tahoma", Font.PLAIN, 11));
-        form.add(lbl, gc);
-        gc.gridx = 1;
-        form.add(field, gc);
+        addLabelField(form, gc, row, label, field);
     }
 
     // =========================================================================
@@ -249,6 +318,7 @@ public class BusinessPartySetupFrame extends JFrame {
     private JPanel createDelegatesTab() {
         JPanel panel = new JPanel(new BorderLayout(8, 8));
         panel.setBorder(new EmptyBorder(8, 12, 8, 12));
+        panel.setBackground(SCREEN_BACKGROUND);
         panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
 
         String[] dCols = {"الاسم", "الوظيفة", "مسار التفويض"};
@@ -257,33 +327,39 @@ public class BusinessPartySetupFrame extends JFrame {
         };
         delegateTable = new JTable(delegateModel);
         delegateTable.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        delegateTable.setRowHeight(22);
+        styleTable(delegateTable);
         JScrollPane scroll = new JScrollPane(delegateTable);
         scroll.setBorder(BorderFactory.createTitledBorder("قائمة المفوضين"));
         panel.add(scroll, BorderLayout.CENTER);
 
-        JPanel form = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 6));
+        JPanel form = createCardPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
         form.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        form.setBackground(new Color(245, 247, 250));
         form.add(new JLabel("اسم المفوض:"));
         txtDelegateName = new JTextField(12);
+        styleField(txtDelegateName);
         form.add(txtDelegateName);
         form.add(new JLabel("الوظيفة:"));
         txtDelegateJob = new JTextField(10);
+        styleField(txtDelegateJob);
         form.add(txtDelegateJob);
         form.add(new JLabel("مسار التفويض:"));
         txtDelegateDocPath = new JTextField(15);
+        styleField(txtDelegateDocPath);
         form.add(txtDelegateDocPath);
         JButton btnAddDelegate = new JButton("إضافة");
+        styleToolbarButton(btnAddDelegate, PRIMARY_COLOR, Color.WHITE);
         btnAddDelegate.addActionListener(e -> addDelegate());
         form.add(btnAddDelegate);
         JButton btnDelDelegate = new JButton("حذف");
+        styleToolbarButton(btnDelDelegate, SECONDARY_COLOR, Color.WHITE);
         btnDelDelegate.addActionListener(e -> deleteDelegate());
         form.add(btnDelDelegate);
         JButton btnViewDoc = new JButton("عرض التفويض");
+        styleToolbarButton(btnViewDoc, SECONDARY_COLOR, Color.WHITE);
         btnViewDoc.addActionListener(e -> viewDelegateDoc());
         form.add(btnViewDoc);
         JButton btnBrowseDoc = new JButton("استعراض");
+        styleToolbarButton(btnBrowseDoc, SECONDARY_COLOR, Color.WHITE);
         btnBrowseDoc.addActionListener(e -> browseDelegateDoc());
         form.add(btnBrowseDoc);
         panel.add(form, BorderLayout.SOUTH);
@@ -605,6 +681,31 @@ public class BusinessPartySetupFrame extends JFrame {
     private int parseInt(String s) {
         if (s == null || s.trim().isEmpty()) return 0;
         try { return Integer.parseInt(s.trim()); } catch (NumberFormatException e) { return 0; }
+    }
+
+    private static class RoundedBorder extends javax.swing.border.AbstractBorder {
+        private static final long serialVersionUID = 1L;
+        private final Color color;
+        private final int radius;
+
+        RoundedBorder(Color color, int radius) {
+            this.color = color;
+            this.radius = radius;
+        }
+
+        @Override
+        public void paintBorder(Component component, Graphics graphics, int x, int y, int width, int height) {
+            Graphics2D g2 = (Graphics2D) graphics.create();
+            g2.setColor(color);
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.drawRoundRect(x, y, width - 1, height - 1, radius, radius);
+            g2.dispose();
+        }
+
+        @Override
+        public Insets getBorderInsets(Component component) {
+            return new Insets(1, 1, 1, 1);
+        }
     }
 
     public static void main(String[] args) {
