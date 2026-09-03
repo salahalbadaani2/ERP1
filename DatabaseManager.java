@@ -28,6 +28,24 @@ public class DatabaseManager {
         return DriverManager.getConnection(URL, USER, PASSWORD);
     }
 
+    private static void addUniqueIndexIfMissing(Connection connection, Statement statement,
+                                                String tableName, String indexName, String columnName)
+            throws SQLException {
+        String sql = "SELECT 1 FROM information_schema.statistics "
+                + "WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?";
+        try (PreparedStatement check = connection.prepareStatement(sql)) {
+            check.setString(1, tableName);
+            check.setString(2, indexName);
+            try (ResultSet resultSet = check.executeQuery()) {
+                if (resultSet.next()) {
+                    return;
+                }
+            }
+        }
+        statement.executeUpdate("ALTER TABLE " + tableName
+                + " ADD UNIQUE KEY " + indexName + " (" + columnName + ")");
+    }
+
     /**
      * فحص أمني ومحاسبي مركزي:
      * يمنع أي عمليات مالية أو مخزنية على الحسابات الرئيسية.
@@ -176,14 +194,14 @@ public class DatabaseManager {
               // تنظيف الفواتير والسندات المكررة وتطبيق قيد الفرادة (UNIQUE)
             try {
                 // حذف السجلات المكررة في المبيعات والإبقاء على سجل واحد
-                stmt.executeUpdate("DELETE t1 FROM sales_invoices t1 INNER JOIN sales_invoices t2 WHERE t1.id > t2.id AND t1.invoice_code = t2.invoice_code");
-                stmt.executeUpdate("ALTER TABLE sales_invoices ADD UNIQUE KEY uq_invoice_code (invoice_code)");
+                stmt.executeUpdate("DELETE t1 FROM sales_invoices t1 INNER JOIN sales_invoices t2 WHERE t1.created_at > t2.created_at AND t1.invoice_code = t2.invoice_code");
+                addUniqueIndexIfMissing(conn, stmt, "sales_invoices", "uq_invoice_code", "invoice_code");
                 // 2. حذف السجلات المكررة في الخزينة والبنك والإبقاء على سجل واحد فريد
                 stmt.executeUpdate("DELETE t1 FROM treasury_vouchers t1 INNER JOIN treasury_vouchers t2 WHERE t1.id > t2.id AND t1.voucher_number = t2.voucher_number");
-                stmt.executeUpdate("ALTER TABLE treasury_vouchers ADD UNIQUE KEY uq_voucher_number (voucher_number)");
+                addUniqueIndexIfMissing(conn, stmt, "treasury_vouchers", "uq_voucher_number", "voucher_number");
                 // 3. حذف السجلات المكررة في تنبيهات المخزون
             stmt.executeUpdate("DELETE t1 FROM stock_alerts t1 INNER JOIN stock_alerts t2 WHERE t1.id > t2.id AND t1.item_code = t2.item_code");
-            stmt.executeUpdate("ALTER TABLE stock_alerts ADD UNIQUE KEY uq_item_code (item_code)");
+            addUniqueIndexIfMissing(conn, stmt, "stock_alerts", "uq_item_code", "item_code");
             } catch (SQLException e) {
                 e.printStackTrace();
             }

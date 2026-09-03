@@ -35,6 +35,7 @@ public class BusinessPartySetupFrame extends JFrame {
 
     private JTextField txtCode, txtEnName, txtOwnerName, txtCity;
     private JComboBox<String> cmbAccountName;
+    private boolean updatingAccountCombo;
     private JComboBox<String> cmbStatus, cmbBalanceType, cmbCurrency, cmbPartyType;
     private JTextField txtParentAccount, txtSubAccount, txtOpeningBalance;
     private JTextField txtCreditLimit, txtCreditPeriod, txtVatNumber, txtCrNumber;
@@ -232,7 +233,11 @@ public class BusinessPartySetupFrame extends JFrame {
         cmbAccountName.addItem("... اختر أو اكتب للبحث في الشجرة");
         cmbAccountName.setSelectedIndex(0);
         styleField(cmbAccountName);
-        cmbAccountName.addActionListener(e -> selectAccountFromCombo());
+        cmbAccountName.addActionListener(e -> {
+            if (!updatingAccountCombo) {
+                selectAccountFromCombo();
+            }
+        });
 
         JPanel namePanel = new JPanel(new BorderLayout(8, 0));
         namePanel.setOpaque(false);
@@ -296,21 +301,18 @@ public class BusinessPartySetupFrame extends JFrame {
     }
 
     private void installPartyNameSearch() {
-        JPopupMenu popup = new JPopupMenu();
-        Timer debounce = new Timer(180, e -> showPartySuggestions(popup));
+        Timer debounce = new Timer(250, e -> searchAccounts(getCommercialName()));
         debounce.setRepeats(false);
         JTextField editor = getAccountEditor();
         editor.getDocument().addDocumentListener(new DocumentListener() {
-            public void insertUpdate(DocumentEvent e) { debounce.restart(); }
-            public void removeUpdate(DocumentEvent e) { debounce.restart(); }
-            public void changedUpdate(DocumentEvent e) { debounce.restart(); }
-        });
-        editor.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent event) {
-                if (event.getClickCount() == 2) {
-                    openAccountTree();
-                }
+            public void insertUpdate(DocumentEvent e) {
+                if (!updatingAccountCombo) debounce.restart();
+            }
+            public void removeUpdate(DocumentEvent e) {
+                if (!updatingAccountCombo) debounce.restart();
+            }
+            public void changedUpdate(DocumentEvent e) {
+                if (!updatingAccountCombo) debounce.restart();
             }
         });
     }
@@ -538,34 +540,62 @@ public class BusinessPartySetupFrame extends JFrame {
         }
     }
 
-    private void showPartySuggestions(JPopupMenu unusedPopup) {
-        String value = getCommercialName();
-        if (value.isEmpty()) return;
-        String accountType = "supplier".equals(partyType) ? "LIABILITY" : "ASSET";
-        String sql = "SELECT account_code, account_name FROM chart_of_accounts "
-                + "WHERE is_sub_account = 1 AND account_type = ? "
-                + "AND (account_code LIKE ? OR account_name LIKE ?) "
-                + "ORDER BY account_name LIMIT 8";
-        try (Connection conn = DatabaseManager.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, accountType);
-            ps.setString(2, "%" + value + "%");
-            ps.setString(3, "%" + value + "%");
-            try (ResultSet rs = ps.executeQuery()) {
-                java.util.List<String> options = new java.util.ArrayList<>();
-                while (rs.next()) {
-                    options.add(rs.getString("account_code") + " - " + rs.getString("account_name"));
-                }
-                String editorText = getAccountEditor().getText();
-                cmbAccountName.removeAllItems();
-                cmbAccountName.addItem("... اختر أو اكتب للبحث في الشجرة");
-                for (String option : options) cmbAccountName.addItem(option);
-                getAccountEditor().setText(editorText);
-                if (!options.isEmpty()) cmbAccountName.showPopup();
-            }
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "فشل البحث في شجرة الحسابات: " + ex.getMessage(),
-                    "خطأ", JOptionPane.ERROR_MESSAGE);
+    private void searchAccounts(String value) {
+        if (value.isEmpty()) {
+            return;
         }
+        final String accountType = "supplier".equals(partyType) ? "LIABILITY" : "ASSET";
+        new SwingWorker<List<String>, Void>() {
+            @Override
+            protected List<String> doInBackground() throws Exception {
+                String sql = "SELECT account_code, account_name FROM chart_of_accounts "
+                        + "WHERE is_sub_account = 1 AND account_type = ? "
+                        + "AND (account_code LIKE ? OR account_name LIKE ?) "
+                        + "ORDER BY account_name LIMIT 8";
+                List<String> options = new ArrayList<>();
+                try (Connection conn = DatabaseManager.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql)) {
+                    String pattern = "%" + value + "%";
+                    ps.setString(1, accountType);
+                    ps.setString(2, pattern);
+                    ps.setString(3, pattern);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            options.add(rs.getString("account_code") + " - "
+                                    + rs.getString("account_name"));
+                        }
+                    }
+                }
+                return options;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    if (!value.equals(getCommercialName())) {
+                        return;
+                    }
+                    List<String> options = get();
+                    String editorText = getAccountEditor().getText();
+                    updatingAccountCombo = true;
+                    cmbAccountName.removeAllItems();
+                    cmbAccountName.addItem("... اختر أو اكتب للبحث في الشجرة");
+                    for (String option : options) {
+                        cmbAccountName.addItem(option);
+                    }
+                    getAccountEditor().setText(editorText);
+                    updatingAccountCombo = false;
+                    if (!options.isEmpty() && getAccountEditor().hasFocus()) {
+                        cmbAccountName.showPopup();
+                    }
+                } catch (Exception ex) {
+                    updatingAccountCombo = false;
+                    JOptionPane.showMessageDialog(BusinessPartySetupFrame.this,
+                            "فشل البحث في شجرة الحسابات: " + ex.getMessage(),
+                            "خطأ", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
     }
 
     private void loadPartyByCode(String code) {
