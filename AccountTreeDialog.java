@@ -342,16 +342,21 @@ public class AccountTreeDialog extends JFrame {
         lblSelectedCode.setText(acc.getCode());
         lblSelectedName.setText(acc.getName());
         lblSelectedLevel.setText("مستوى " + acc.getLevel());
-        lblSelectedType.setText(acc.getType() + (acc.isSubAccount() ? " (يقبل القيود)" : " (تجميعي)"));
-        lblSelectedBalance.setText(String.format("%,.2f YER", acc.getBalance()));
-
-        if (acc.isSubAccount()) {
+        boolean isParentWithChildren = hasChildren(acc.getCode());
+        if (isParentWithChildren) {
+            lblSelectedType.setText("حساب رئيسي/تجميعي (يحتوي على حسابات متفرعة)");
+            lblValidationStatus.setText("لا يمكن الترحيل عليه");
+            lblValidationStatus.setForeground(new Color(200, 50, 50));
+        } else if (acc.isSubAccount()) {
+            lblSelectedType.setText(acc.getType() + " (يقبل القيود)");
             lblValidationStatus.setText(" ");
             lblValidationStatus.setForeground(new Color(16, 185, 129));
         } else {
+            lblSelectedType.setText(acc.getType() + " (تجميعي)");
             lblValidationStatus.setText(" ");
             lblValidationStatus.setForeground(new Color(100, 116, 139));
         }
+        lblSelectedBalance.setText(String.format("%,.2f YER", acc.getBalance()));
     }
 
     private void resetDetails() {
@@ -368,6 +373,14 @@ public class AccountTreeDialog extends JFrame {
     private void handleSelectAccount() {
         if (selectedAccount == null) {
             JOptionPane.showMessageDialog(this, "يرجى تحديد حساب من الشجرة أولاً.", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        if (hasChildren(selectedAccount.getCode())) {
+            JOptionPane.showMessageDialog(this,
+                    "لا يمكن الترحيل على حساب رئيسي يحتوي على حسابات متفرعة تحته.",
+                    "تنبيه",
+                    JOptionPane.ERROR_MESSAGE);
             return;
         }
 
@@ -579,9 +592,12 @@ public class AccountTreeDialog extends JFrame {
         int result = JOptionPane.showConfirmDialog(this, form, "إضافة حساب", JOptionPane.OK_CANCEL_OPTION);
         if (result == JOptionPane.OK_OPTION) {
             boolean isChild = cmbRelation.getSelectedIndex() == 1;
-            if (isChild && selectedAccount.isSubAccount()) {
-                JOptionPane.showMessageDialog(this, "لا يمكن إضافة حساب ابن تحت حساب فرعي مخصص للقيود.", "تنبيه", JOptionPane.WARNING_MESSAGE);
-                return;
+            if (isChild) {
+                boolean parentIsSub = isParentSubAccount(selectedAccount.getCode());
+                if (parentIsSub || selectedAccount.isSubAccount()) {
+                    JOptionPane.showMessageDialog(this, "لا يمكن إضافة حساب تحت حساب فرعي. الحسابات الفرعية مخصصة للترحيل المباشر فقط ولا تقبل التفرع.", "تنبيه", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
             }
             String parentCode = isChild ? selectedAccount.getCode() : selectedAccount.getParentCode();
             int level = isChild ? selectedAccount.getLevel() + 1 : selectedAccount.getLevel();
@@ -739,6 +755,33 @@ public class AccountTreeDialog extends JFrame {
         } catch (Exception ignored) { return false; }
     }
 
+    private boolean isParentSubAccount(String parentCode) {
+        String sql = "SELECT is_sub_account FROM chart_of_accounts WHERE account_code = ?";
+        try (Connection conn = DatabaseManager.getConnection(); PreparedStatement statement = conn.prepareStatement(sql)) {
+            statement.setString(1, parentCode);
+            try (ResultSet result = statement.executeQuery()) {
+                if (result.next()) return result.getBoolean(1);
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private boolean hasChildrenInDb(String code) {
+        String sql = "SELECT 1 FROM chart_of_accounts WHERE parent_code = ? LIMIT 1";
+        try (Connection conn = DatabaseManager.getConnection(); PreparedStatement statement = conn.prepareStatement(sql)) {
+            statement.setString(1, code);
+            try (ResultSet result = statement.executeQuery()) { return result.next(); }
+        } catch (Exception ignored) { return false; }
+    }
+
+    private boolean hasChildrenInList(String code) {
+        return accountList.stream().anyMatch(a -> code.equals(a.getParentCode()));
+    }
+
+    private boolean hasChildren(String code) {
+        return hasChildrenInDb(code) || hasChildrenInList(code);
+    }
+
     private void appendAccountToFile(AccountNodeData account) {
         // تم إلغاء الكتابة لملف AccountsData.txt - المصدر الوحيد هو قاعدة البيانات
     }
@@ -787,7 +830,7 @@ public class AccountTreeDialog extends JFrame {
         return selectedAccount;
     }
 
-    private static class AccountTreeCellRenderer extends DefaultTreeCellRenderer {
+    private class AccountTreeCellRenderer extends DefaultTreeCellRenderer {
         private AccountTreeCellRenderer() {
             setLeafIcon(null);
             setOpenIcon(null);
@@ -806,7 +849,11 @@ public class AccountTreeDialog extends JFrame {
                     AccountNodeData acc = (AccountNodeData) node.getUserObject();
                     setText(acc.getCode() + " - " + acc.getName());
 
-                    if (acc.isSubAccount()) {
+                    boolean isParentWithChildren = hasChildren(acc.getCode());
+                    if (isParentWithChildren) {
+                        setForeground(new Color(30, 41, 59));
+                        setFont(getFont().deriveFont(Font.BOLD));
+                    } else if (acc.isSubAccount()) {
                         setForeground(new Color(16, 185, 129));
                         setFont(getFont().deriveFont(Font.PLAIN));
                     } else {
