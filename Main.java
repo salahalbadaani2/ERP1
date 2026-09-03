@@ -3,6 +3,7 @@ import javax.swing.*;
 public class Main {
     public static void main(String[] args) {
         DatabaseManager.initializeDatabase();
+        DatabaseManager.initializeParties();
         SwingUtilities.invokeLater(() -> {
             try {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());

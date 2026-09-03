@@ -34,8 +34,8 @@ public class GeneralLedgerModuleFrame extends JFrame {
         btnBank.addActionListener(e -> new BankReconciliationFrame().setVisible(true));
         btnDebit.addActionListener(e -> new DebitNoteFrame().setVisible(true));
         btnCredit.addActionListener(e -> new CreditNoteFrame().setVisible(true));
-        btnVendor.addActionListener(e -> new VendorSetupFrame().setVisible(true));
-        btnCustomer.addActionListener(e -> new CustomerSetupFrame().setVisible(true));
+        btnVendor.addActionListener(e -> new BusinessPartySetupFrame("supplier").setVisible(true));
+        btnCustomer.addActionListener(e -> new BusinessPartySetupFrame("customer").setVisible(true));
 
         panel.add(btnJournal);
         panel.add(btnBank);

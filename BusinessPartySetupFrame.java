@@ -1,0 +1,615 @@
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.File;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+
+public class BusinessPartySetupFrame extends JFrame {
+    private static final long serialVersionUID = 1L;
+    private String partyType = "supplier";
+    private String editCode = null;
+    private boolean isEditMode = false;
+
+    private JTextField txtCode, txtArName, txtEnName, txtOwnerName;
+    private JComboBox<String> cmbStatus, cmbBalanceType, cmbCurrency, cmbPartyType;
+    private JTextField txtParentAccount, txtSubAccount, txtOpeningBalance;
+    private JTextField txtCreditLimit, txtCreditPeriod, txtVatNumber, txtCrNumber;
+    private JTextField txtPhone, txtMobile, txtEmail, txtAddress, txtContactPerson;
+    private JTextField txtCrImagePath, txtDelegateName, txtDelegateJob, txtDelegateDocPath;
+    private JTable delegateTable, partyTable;
+    private DefaultTableModel delegateModel, partyModel;
+    private JButton btnBrowseParent, btnBrowseCrImage, btnBrowseDelegateDoc, btnSave, btnNew, btnDelete;
+    private JTextField txtSearch;
+
+    public BusinessPartySetupFrame(String type) {
+        this.partyType = type;
+        setTitle((("supplier".equals(type)) ? "الموردين" : "العملاء") + " - تهيئة وتكوين");
+        setSize(1100, 750);
+        setMinimumSize(new Dimension(900, 600));
+        setLocationRelativeTo(null);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        initUI();
+        loadPartyList();
+        generateCode();
+    }
+
+    private void initUI() {
+        setLayout(new BorderLayout());
+
+        // =========================================================================
+        // شريط الأدوات العلوي (Toolbar)
+        // =========================================================================
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 6));
+        toolbar.setBackground(new Color(245, 247, 250));
+        toolbar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(200, 205, 215)),
+                new EmptyBorder(5, 8, 5, 8)));
+        toolbar.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+
+        btnNew = createToolbarButton("جديد", "icons/add.png");
+        btnSave = createToolbarButton("حفظ", "icons/save.png");
+        JButton btnEdit = createToolbarButton("تعديل", "icons/edit.png");
+        btnDelete = createToolbarButton("حذف", "icons/delete.png");
+        JButton btnClear = createToolbarButton("مسح", "icons/clear.png");
+        JButton btnReport = createToolbarButton("تقرير", "icons/report.png");
+        JButton btnClose = createToolbarButton("إغلاق", "icons/close.png");
+
+        toolbar.add(btnNew);
+        toolbar.add(btnSave);
+        toolbar.add(btnEdit);
+        toolbar.add(btnDelete);
+        toolbar.add(btnClear);
+        toolbar.add(Box.createHorizontalGlue());
+        toolbar.add(new JLabel("بحث:"));
+        txtSearch = new JTextField(15);
+        txtSearch.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { filterPartyList(); }
+            public void removeUpdate(DocumentEvent e) { filterPartyList(); }
+            public void changedUpdate(DocumentEvent e) { filterPartyList(); }
+        });
+        toolbar.add(txtSearch);
+        toolbar.add(btnReport);
+        toolbar.add(btnClose);
+        add(toolbar, BorderLayout.NORTH);
+
+        // =========================================================================
+        // التبويبات (JTabbedPane)
+        // =========================================================================
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        tabs.addTab("البيانات العامة", createGeneralTab());
+        tabs.addTab("المالية والضريبية", createFinancialTab());
+        tabs.addTab("المفوضين", createDelegatesTab());
+        add(tabs, BorderLayout.CENTER);
+
+        // =========================================================================
+        // الجدول السفلي
+        // =========================================================================
+        String[] cols = {"الكود", "الاسم التجاري", "النوع", "الحالة", "الرقم الضريبي"};
+        partyModel = new DefaultTableModel(cols, 0) {
+            @Override public boolean isCellEditable(int row, int col) { return false; }
+        };
+        partyTable = new JTable(partyModel);
+        partyTable.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        partyTable.setRowHeight(22);
+        partyTable.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) loadSelectedParty();
+        });
+        JScrollPane scrollParty = new JScrollPane(partyTable);
+        scrollParty.setBorder(BorderFactory.createTitledBorder(
+                "قائمة " + (("supplier".equals(partyType)) ? "الموردين" : "العملاء")));
+        add(scrollParty, BorderLayout.SOUTH);
+
+        // أزرار التبويب
+        btnNew.addActionListener(e -> newParty());
+        btnSave.addActionListener(e -> saveParty());
+        btnEdit.addActionListener(e -> editParty());
+        btnDelete.addActionListener(e -> deleteParty());
+        btnClear.addActionListener(e -> clearForm());
+        btnReport.addActionListener(e -> showReport());
+        btnClose.addActionListener(e -> dispose());
+    }
+
+    private JButton createToolbarButton(String text, String iconPath) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("Tahoma", Font.PLAIN, 11));
+        btn.setFocusPainted(false);
+        try {
+            BufferedImage img = ImageIO.read(new File(iconPath));
+            if (img != null) btn.setIcon(new ImageIcon(img.getScaledInstance(18, 18, Image.SCALE_SMOOTH)));
+        } catch (Exception ignored) {}
+        return btn;
+    }
+
+    // =========================================================================
+    // التبويب الأول: البيانات العامة
+    // =========================================================================
+    private JPanel createGeneralTab() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBorder(new EmptyBorder(8, 12, 8, 12));
+        panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        form.setBackground(Color.WHITE);
+        GridBagConstraints gc = new GridBagConstraints();
+        gc.fill = GridBagConstraints.HORIZONTAL;
+        gc.insets = new Insets(3, 6, 3, 6);
+        gc.weightx = 1.0;
+
+        int row = 0;
+        // صف 1: الكود + الاسم العربي
+        gc.gridx = 0; gc.gridwidth = 1; addLabelField(form, gc, row, "كود الجهة:", txtCode = new JTextField(18)); gc.gridx = 2; gc.gridwidth = 1; addLabelField(form, gc, row, "الاسم التجاري *:", txtArName = new JTextField(20)); row++;
+        // صف 2: الاسم الإنجليزي + نوع الجهة
+        gc.gridx = 0; addLabelField(form, gc, row, "الاسم الإنجليزي:", txtEnName = new JTextField(18)); gc.gridx = 2; addLabelField(form, gc, row, "نوع الجهة:", createPartyTypeCombo()); row++;
+        // صف 3: الحالة + صاحب الجهة
+        gc.gridx = 0; addLabelField(form, gc, row, "الحالة:", cmbStatus = new JComboBox<>(new String[]{"active", "suspended"})); gc.gridx = 2; addLabelField(form, gc, row, "صاحب الجهة:", txtOwnerName = new JTextField(20)); row++;
+        // صف 4: الحساب الأب + الحساب الفرعي
+        JPanel parentPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        parentPanel.setOpaque(false); parentPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        parentPanel.add(new JLabel("الحساب الأب:"));
+        txtParentAccount = new JTextField(12); txtParentAccount.setEditable(false);
+        parentPanel.add(txtParentAccount);
+        btnBrowseParent = new JButton("استعراض");
+        btnBrowseParent.setFont(new Font("Tahoma", Font.PLAIN, 10));
+        btnBrowseParent.addActionListener(e -> browseParentAccount());
+        parentPanel.add(btnBrowseParent);
+        JPanel subPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        subPanel.setOpaque(false); subPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        subPanel.add(new JLabel("الحساب الفرعي:*"));
+        txtSubAccount = new JTextField(12); txtSubAccount.setEditable(false);
+        subPanel.add(txtSubAccount);
+        gc.gridx = 0; gc.gridwidth = 2; form.add(parentPanel, gc); row++;
+        gc.gridx = 0; gc.gridwidth = 2; form.add(subPanel, gc); row++;
+        // صف 6: الهاتف + الجوال
+        gc.gridx = 0; addLabelField(form, gc, row, "الهاتف:", txtPhone = new JTextField(18)); gc.gridx = 2; addLabelField(form, gc, row, "الجوال:", txtMobile = new JTextField(18)); row++;
+        // صف 7: الإيميل + العنوان
+        gc.gridx = 0; addLabelField(form, gc, row, "الإيميل:", txtEmail = new JTextField(18)); gc.gridx = 2; addLabelField(form, gc, row, "العنوان:", txtAddress = new JTextField(20)); row++;
+        gc.gridx = 0; gc.gridwidth = 2; addLabelField(form, gc, row, "جهة الاتصال:", txtContactPerson = new JTextField(18)); row++;
+
+        panel.add(form, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private void addLabelField(JPanel form, GridBagConstraints gc, int row, String label, JComponent field) {
+        gc.gridx = 0; gc.gridwidth = 1; gc.gridy = row;
+        JLabel lbl = new JLabel(label);
+        lbl.setFont(new Font("Tahoma", Font.PLAIN, 11));
+        form.add(lbl, gc);
+        gc.gridx = 1; gc.gridwidth = 1;
+        form.add(field, gc);
+    }
+
+    private JComboBox<String> createPartyTypeCombo() {
+        cmbPartyType = new JComboBox<>(new String[]{"supplier", "customer"});
+        cmbPartyType.addActionListener(e -> {
+            partyType = (String) cmbPartyType.getSelectedItem();
+            generateCode();
+        });
+        return cmbPartyType;
+    }
+
+    // =========================================================================
+    // التبويب الثاني: المالية والضريبية
+    // =========================================================================
+    private JPanel createFinancialTab() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(new EmptyBorder(10, 20, 10, 20));
+        GridBagConstraints gc = new GridBagConstraints();
+        gc.fill = GridBagConstraints.HORIZONTAL;
+        gc.insets = new Insets(5, 10, 5, 10);
+        gc.weightx = 1.0;
+
+        int row = 0;
+        gc.gridwidth = 2; addLabelField2(panel, gc, row, "سقف الائتمان:", txtCreditLimit = new JTextField(14)); row++;
+        gc.gridwidth = 2; addLabelField2(panel, gc, row, "فترة السداد (أيام):", txtCreditPeriod = new JTextField(10)); row++;
+        gc.gridwidth = 2; addLabelField2(panel, gc, row, "العملة:", cmbCurrency = new JComboBox<>(new String[]{"YER", "USD", "SAR", "EUR"})); row++;
+        gc.gridwidth = 2; addLabelField2(panel, gc, row, "الرصيد الافتتاحي:", txtOpeningBalance = new JTextField(12)); row++;
+        gc.gridwidth = 2; addLabelField2(panel, gc, row, "نوع الرصيد:", cmbBalanceType = new JComboBox<>(new String[]{"debit", "credit"})); row++;
+        gc.gridwidth = 2; addLabelField2(panel, gc, row, "الرقم الضريبي (ضريبة القيمة المضافة):", txtVatNumber = new JTextField(18)); row++;
+        gc.gridwidth = 2; addLabelField2(panel, gc, row, "السجل التجاري:", txtCrNumber = new JTextField(20)); row++;
+        JPanel crImgPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        crImgPanel.setOpaque(false); crImgPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        crImgPanel.add(new JLabel("مسار صورة السجل التجاري:"));
+        crImgPanel.add(txtCrImagePath = new JTextField(15));
+        btnBrowseCrImage = new JButton("استعراض");
+        btnBrowseCrImage.addActionListener(e -> browseCrImage());
+        crImgPanel.add(btnBrowseCrImage);
+        gc.gridwidth = 2; panel.add(crImgPanel, gc); row++;
+
+        return panel;
+    }
+
+    private void addLabelField2(JPanel form, GridBagConstraints gc, int row, String label, JComponent field) {
+        gc.gridx = 0; gc.gridwidth = 1; gc.gridy = row;
+        JLabel lbl = new JLabel(label);
+        lbl.setFont(new Font("Tahoma", Font.PLAIN, 11));
+        form.add(lbl, gc);
+        gc.gridx = 1;
+        form.add(field, gc);
+    }
+
+    // =========================================================================
+    // التبويب الثالث: المفوضين
+    // =========================================================================
+    private JPanel createDelegatesTab() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBorder(new EmptyBorder(8, 12, 8, 12));
+        panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+
+        String[] dCols = {"الاسم", "الوظيفة", "مسار التفويض"};
+        delegateModel = new DefaultTableModel(dCols, 0) {
+            @Override public boolean isCellEditable(int row, int col) { return false; }
+        };
+        delegateTable = new JTable(delegateModel);
+        delegateTable.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        delegateTable.setRowHeight(22);
+        JScrollPane scroll = new JScrollPane(delegateTable);
+        scroll.setBorder(BorderFactory.createTitledBorder("قائمة المفوضين"));
+        panel.add(scroll, BorderLayout.CENTER);
+
+        JPanel form = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 6));
+        form.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        form.setBackground(new Color(245, 247, 250));
+        form.add(new JLabel("اسم المفوض:"));
+        txtDelegateName = new JTextField(12);
+        form.add(txtDelegateName);
+        form.add(new JLabel("الوظيفة:"));
+        txtDelegateJob = new JTextField(10);
+        form.add(txtDelegateJob);
+        form.add(new JLabel("مسار التفويض:"));
+        txtDelegateDocPath = new JTextField(15);
+        form.add(txtDelegateDocPath);
+        JButton btnAddDelegate = new JButton("إضافة");
+        btnAddDelegate.addActionListener(e -> addDelegate());
+        form.add(btnAddDelegate);
+        JButton btnDelDelegate = new JButton("حذف");
+        btnDelDelegate.addActionListener(e -> deleteDelegate());
+        form.add(btnDelDelegate);
+        JButton btnViewDoc = new JButton("عرض التفويض");
+        btnViewDoc.addActionListener(e -> viewDelegateDoc());
+        form.add(btnViewDoc);
+        JButton btnBrowseDoc = new JButton("استعراض");
+        btnBrowseDoc.addActionListener(e -> browseDelegateDoc());
+        form.add(btnBrowseDoc);
+        panel.add(form, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
+    private void browseParentAccount() {
+        String prefix = "supplier".equals(partyType) ? "2" : "12";
+        AccountTreeDialog dialog = new AccountTreeDialog(this, prefix);
+        dialog.setVisible(true);
+        if (dialog.isAccountSelected()) {
+            txtParentAccount.setText(dialog.getSelectedAccountCode());
+            txtSubAccount.setText(DatabaseManager.generatePartySubAccountCode(dialog.getSelectedAccountCode()));
+        }
+    }
+
+    private void browseCrImage() {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("اختر صورة السجل التجاري");
+        if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            txtCrImagePath.setText(fc.getSelectedFile().getAbsolutePath());
+        }
+    }
+
+    private void browseDelegateDoc() {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("اختر مستند التفويض");
+        if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            txtDelegateDocPath.setText(fc.getSelectedFile().getAbsolutePath());
+        }
+    }
+
+    private void viewDelegateDoc() {
+        int row = delegateTable.getSelectedRow();
+        if (row < 0) { JOptionPane.showMessageDialog(this, "يرجى تحديد مفوض", "تنبيه", JOptionPane.WARNING_MESSAGE); return; }
+        String path = (String) delegateModel.getValueAt(row, 2);
+        if (path != null && !path.isEmpty()) {
+            try {
+                BufferedImage img = ImageIO.read(new File(path));
+                if (img != null) {
+                    JLabel lbl = new JLabel(new ImageIcon(img.getScaledInstance(400, 300, Image.SCALE_SMOOTH)));
+                    JOptionPane.showMessageDialog(this, lbl, "صورة التفويض", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(this, "لا يمكن عرض الملف: " + path, "خطأ", JOptionPane.ERROR_MESSAGE);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "خطأ في عرض الصورة: " + ex.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void generateCode() {
+        if (isEditMode) return;
+        try {
+            String prefix = "supplier".equals(partyType) ? "SUP" : "CUS";
+            String sql = "SELECT MAX(code) FROM business_parties WHERE code LIKE ?";
+            try (Connection conn = DatabaseManager.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, prefix + "%");
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next() && rs.getObject(1) != null) {
+                        String max = rs.getString(1);
+                        String num = max.substring(prefix.length());
+                        int next = Integer.parseInt(num.isEmpty() ? "0" : num) + 1;
+                        txtCode.setText(prefix + String.format("%04d", next));
+                    } else {
+                        txtCode.setText(prefix + "0001");
+                    }
+                }
+            }
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    private void newParty() {
+        isEditMode = false;
+        editCode = null;
+        clearForm();
+        generateCode();
+        txtArName.requestFocus();
+    }
+
+    private void saveParty() {
+        if (!validateInput()) return;
+        if (DatabaseManager.isPartyCodeExists(txtCode.getText().trim()) && !isEditMode) {
+            JOptionPane.showMessageDialog(this, "كود الجهة موجود مسبقاً", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (DatabaseManager.isPartyArNameExists(txtArName.getText().trim(), isEditMode ? editCode : null)) {
+            JOptionPane.showMessageDialog(this, "الاسم التجاري موجود مسبقاً", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (txtVatNumber.getText().trim().length() > 0 && DatabaseManager.isVatNumberExists(txtVatNumber.getText().trim(), isEditMode ? editCode : null)) {
+            JOptionPane.showMessageDialog(this, "الرقم الضريبي موجود مسبقاً", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (txtParentAccount.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "يجب تحديد الحساب الأب من شجرة الحسابات", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (txtSubAccount.getText().trim().isEmpty()) {
+            txtSubAccount.setText(DatabaseManager.generatePartySubAccountCode(txtParentAccount.getText().trim()));
+        }
+
+        try {
+            Connection conn = DatabaseManager.getConnection();
+            List<String[]> delegates = new ArrayList<>();
+            for (int i = 0; i < delegateModel.getRowCount(); i++) {
+                delegates.add(new String[]{
+                        (String) delegateModel.getValueAt(i, 0),
+                        (String) delegateModel.getValueAt(i, 1),
+                        (String) delegateModel.getValueAt(i, 2)
+                });
+            }
+            boolean success;
+            if (isEditMode) {
+                success = DatabaseManager.updatePartyWithAccount(conn,
+                        txtCode.getText().trim(), txtArName.getText().trim(), txtEnName.getText().trim(),
+                        partyType, txtOwnerName.getText().trim(), txtParentAccount.getText().trim(),
+                        txtSubAccount.getText().trim(),
+                        parseDouble(txtCreditLimit.getText()), parseInt(txtCreditPeriod.getText()),
+                        (String) cmbCurrency.getSelectedItem(),
+                        parseDouble(txtOpeningBalance.getText()), (String) cmbBalanceType.getSelectedItem(),
+                        txtVatNumber.getText().trim(), txtCrNumber.getText().trim(),
+                        txtCrImagePath.getText().trim(), txtPhone.getText().trim(),
+                        txtMobile.getText().trim(), txtEmail.getText().trim(),
+                        txtAddress.getText().trim(), txtContactPerson.getText().trim(),
+                        delegates);
+            } else {
+                success = DatabaseManager.savePartyWithAccount(conn,
+                        txtCode.getText().trim(), txtArName.getText().trim(), txtEnName.getText().trim(),
+                        partyType, txtOwnerName.getText().trim(), txtParentAccount.getText().trim(),
+                        txtSubAccount.getText().trim(),
+                        parseDouble(txtCreditLimit.getText()), parseInt(txtCreditPeriod.getText()),
+                        (String) cmbCurrency.getSelectedItem(),
+                        parseDouble(txtOpeningBalance.getText()), (String) cmbBalanceType.getSelectedItem(),
+                        txtVatNumber.getText().trim(), txtCrNumber.getText().trim(),
+                        txtCrImagePath.getText().trim(), txtPhone.getText().trim(),
+                        txtMobile.getText().trim(), txtEmail.getText().trim(),
+                        txtAddress.getText().trim(), txtContactPerson.getText().trim(),
+                        delegates);
+            }
+            if (success) {
+                JOptionPane.showMessageDialog(this, "تم حفظ بيانات " + (("supplier".equals(partyType)) ? "المورد" : "الزبون") + " بنجاح مع الربط المحاسبي", "نجاح", JOptionPane.INFORMATION_MESSAGE);
+                loadPartyList();
+                clearForm();
+                generateCode();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "فشل الحفظ: " + e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void editParty() {
+        if (editCode == null || editCode.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "يرجى تحديد جهة من القائمة لتعديلها", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        isEditMode = true;
+        saveParty();
+    }
+
+    private void deleteParty() {
+        if (editCode == null || editCode.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "يرجى تحديد جهة من القائمة لحذفها", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        int confirm = JOptionPane.showConfirmDialog(this, "هل أنت متأكد من حذف الجهة [" + editCode + "]؟", "تأكيد الحذف", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            if (DatabaseManager.deleteParty(editCode)) {
+                JOptionPane.showMessageDialog(this, "تم حذف الجهة بنجاح", "نجاح", JOptionPane.INFORMATION_MESSAGE);
+                loadPartyList();
+                clearForm();
+                generateCode();
+            } else {
+                JOptionPane.showMessageDialog(this, "فشل حذف الجهة", "خطأ", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void addDelegate() {
+        if (txtDelegateName.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "يرجى إدخال اسم المفوض", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        delegateModel.addRow(new Object[]{txtDelegateName.getText().trim(), txtDelegateJob.getText().trim(), txtDelegateDocPath.getText().trim()});
+        txtDelegateName.setText(""); txtDelegateJob.setText(""); txtDelegateDocPath.setText("");
+    }
+
+    private void deleteDelegate() {
+        int row = delegateTable.getSelectedRow();
+        if (row < 0) { JOptionPane.showMessageDialog(this, "يرجى تحديد مفوض", "تنبيه", JOptionPane.WARNING_MESSAGE); return; }
+        delegateModel.removeRow(row);
+    }
+
+
+
+    private void loadPartyList() {
+        partyModel.setRowCount(0);
+        StringBuilder sql = new StringBuilder("SELECT * FROM business_parties WHERE 1=1");
+        java.util.ArrayList<String> params = new java.util.ArrayList<>();
+        if (partyType != null && !partyType.isEmpty()) { sql.append(" AND party_type = ?"); params.add(partyType); }
+        if (txtSearch.getText().trim() != null && !txtSearch.getText().trim().isEmpty()) {
+            sql.append(" AND (ar_name LIKE ? OR code LIKE ? OR vat_number LIKE ?)");
+            params.add("%" + txtSearch.getText().trim() + "%"); params.add("%" + txtSearch.getText().trim() + "%"); params.add("%" + txtSearch.getText().trim() + "%");
+        }
+        sql.append(" ORDER BY created_at DESC");
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            for (int i = 0; i < params.size(); i++) { ps.setString(i + 1, params.get(i)); }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    partyModel.addRow(new Object[]{
+                            rs.getString("code"), rs.getString("ar_name"),
+                            rs.getString("party_type"), rs.getString("status"),
+                            rs.getString("vat_number") != null ? rs.getString("vat_number") : ""
+                    });
+                }
+            }
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    private void filterPartyList() {
+        loadPartyList();
+    }
+
+    private void loadSelectedParty() {
+        int row = partyTable.getSelectedRow();
+        if (row < 0) return;
+        editCode = (String) partyModel.getValueAt(row, 0);
+        isEditMode = true;
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT * FROM business_parties WHERE code = ?")) {
+            ps.setString(1, editCode);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    txtCode.setText(rs.getString("code"));
+                    txtArName.setText(rs.getString("ar_name"));
+                    txtEnName.setText(rs.getString("en_name") != null ? rs.getString("en_name") : "");
+                    partyType = rs.getString("party_type");
+                    if (rs.getString("party_type") != null) cmbPartyType.setSelectedItem(rs.getString("party_type"));
+                    txtOwnerName.setText(rs.getString("owner_name") != null ? rs.getString("owner_name") : "");
+                    txtParentAccount.setText(rs.getString("parent_account_code") != null ? rs.getString("parent_account_code") : "");
+                    txtSubAccount.setText(rs.getString("sub_account_code") != null ? rs.getString("sub_account_code") : "");
+                    txtOpeningBalance.setText(rs.getDouble("opening_balance") != 0 ? String.valueOf(rs.getDouble("opening_balance")) : "");
+                    txtCreditLimit.setText(rs.getDouble("credit_limit") != 0 ? String.valueOf(rs.getDouble("credit_limit")) : "");
+                    txtCreditPeriod.setText(rs.getInt("credit_period_days") != 0 ? String.valueOf(rs.getInt("credit_period_days")) : "");
+                    txtVatNumber.setText(rs.getString("vat_number") != null ? rs.getString("vat_number") : "");
+                    txtCrNumber.setText(rs.getString("cr_number") != null ? rs.getString("cr_number") : "");
+                    txtCrImagePath.setText(rs.getString("cr_image_path") != null ? rs.getString("cr_image_path") : "");
+                    txtPhone.setText(rs.getString("phone") != null ? rs.getString("phone") : "");
+                    txtMobile.setText(rs.getString("mobile") != null ? rs.getString("mobile") : "");
+                    txtEmail.setText(rs.getString("email") != null ? rs.getString("email") : "");
+                    txtAddress.setText(rs.getString("address") != null ? rs.getString("address") : "");
+                    txtContactPerson.setText(rs.getString("contact_person") != null ? rs.getString("contact_person") : "");
+                    if (rs.getString("status") != null) cmbStatus.setSelectedItem(rs.getString("status"));
+                    if (rs.getString("balance_type") != null) cmbBalanceType.setSelectedItem(rs.getString("balance_type"));
+                    if (rs.getString("currency_code") != null) cmbCurrency.setSelectedItem(rs.getString("currency_code"));
+                }
+            }
+        } catch (SQLException e) { e.printStackTrace(); }
+        loadDelegates(editCode);
+    }
+
+    private void loadDelegates(String code) {
+        delegateModel.setRowCount(0);
+        String sql = "SELECT * FROM party_delegates WHERE party_code = ?";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, code);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    delegateModel.addRow(new Object[]{rs.getString("delegate_name"), rs.getString("job_title"), rs.getString("authorization_doc_path")});
+                }
+            }
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    private void clearForm() {
+        isEditMode = false;
+        editCode = null;
+        txtCode.setText(""); txtArName.setText(""); txtEnName.setText("");
+        txtOwnerName.setText(""); txtParentAccount.setText(""); txtSubAccount.setText("");
+        txtOpeningBalance.setText(""); txtCreditLimit.setText(""); txtCreditPeriod.setText("");
+        txtVatNumber.setText(""); txtCrNumber.setText(""); txtCrImagePath.setText("");
+        txtPhone.setText(""); txtMobile.setText(""); txtEmail.setText("");
+        txtAddress.setText(""); txtContactPerson.setText("");
+        txtDelegateName.setText(""); txtDelegateJob.setText(""); txtDelegateDocPath.setText("");
+        delegateModel.setRowCount(0);
+        cmbStatus.setSelectedIndex(0);
+        cmbBalanceType.setSelectedIndex(0);
+        cmbCurrency.setSelectedIndex(0);
+        if (cmbPartyType != null) cmbPartyType.setSelectedIndex("supplier".equals(partyType) ? 0 : 1);
+        partyType = "supplier";
+    }
+
+    private boolean validateInput() {
+        if (txtArName.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "يجب إدخال الاسم التجاري", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            txtArName.requestFocus();
+            return false;
+        }
+        if (txtParentAccount.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "يجب تحديد الحساب الأب من شجرة الحسابات", "تنبيه", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        return true;
+    }
+
+    private void showReport() {
+        JOptionPane.showMessageDialog(this, "تم فتح تقرير " + (("supplier".equals(partyType)) ? "الموردين" : "العملاء"), "تقرير", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private double parseDouble(String s) {
+        if (s == null || s.trim().isEmpty()) return 0;
+        try { return Double.parseDouble(s.trim().replace(",", "")); } catch (NumberFormatException e) { return 0; }
+    }
+
+    private int parseInt(String s) {
+        if (s == null || s.trim().isEmpty()) return 0;
+        try { return Integer.parseInt(s.trim()); } catch (NumberFormatException e) { return 0; }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            new BusinessPartySetupFrame("supplier").setVisible(true);
+        });
+    }
+}

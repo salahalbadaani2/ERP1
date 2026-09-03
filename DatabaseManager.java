@@ -3,6 +3,8 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.ResultSet;
+import javax.swing.JOptionPane;
 
 public class DatabaseManager {
     // تحميل تعريف مكتبة MySQL آلياً في الذاكرة عند تشغيل أي شاشة
@@ -75,11 +77,7 @@ public class DatabaseManager {
             stmt.executeUpdate("ALTER DATABASE erp_factory_db CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci");
 
             // مسح الفهارس القديمة على عمود document_number في جدول حركات المخزون
-            try {
-                stmt.executeUpdate("ALTER TABLE inventory_movements DROP INDEX document_number");
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
+            try { stmt.executeUpdate("ALTER TABLE inventory_movements DROP INDEX document_number"); } catch (SQLException ignored) {}
 
             // جدول حركات المخزون (inventory_movements) - إنشاء تلقائي عند بداية التشغيل
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS inventory_movements ("
@@ -295,7 +293,8 @@ public class DatabaseManager {
         } catch (SQLException e) {
             System.err.println("خطأ أثناء تهيئة جداول قاعدة البيانات: " + e.getMessage());
         }
-        }
+    }
+
     // =========================================================================
     // 1. دورة المشتريات: حفظ مذكرة استلام الخامات (GRN)
     // ===========================================203==============================
@@ -662,16 +661,446 @@ public class DatabaseManager {
     private static void addTreasuryColumn(Statement stmt, String definition) {
         try {
             stmt.executeUpdate("ALTER TABLE treasury_vouchers ADD COLUMN " + definition);
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        } catch (SQLException ignored) {}
     }
 
     private static void addTableColumn(Statement stmt, String tableName, String definition) {
         try {
             stmt.executeUpdate("ALTER TABLE " + tableName + " ADD COLUMN " + definition);
+        } catch (SQLException ignored) {}
+    }
+
+    // =========================================================================
+    // تهيئة جداول الموردين والعملاء والمفوضين والمرفقات
+    // =========================================================================
+    public static void initializeParties() {
+        try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS business_parties ("
+                    + "code VARCHAR(20) PRIMARY KEY, ar_name VARCHAR(255) NOT NULL, "
+                    + "en_name VARCHAR(255), party_type ENUM('supplier','customer') NOT NULL, "
+                    + "status ENUM('active','suspended') NOT NULL DEFAULT 'active', "
+                    + "owner_name VARCHAR(255), parent_account_code VARCHAR(20), "
+                    + "sub_account_code VARCHAR(20), credit_limit DECIMAL(18,2) DEFAULT 0, "
+                    + "credit_period_days INT DEFAULT 0, currency_code VARCHAR(10) DEFAULT 'YER', "
+                    + "opening_balance DECIMAL(18,4) DEFAULT 0, balance_type ENUM('debit','credit') DEFAULT 'debit', "
+                    + "vat_number VARCHAR(20) UNIQUE, cr_number VARCHAR(50) UNIQUE, "
+                    + "cr_image_path VARCHAR(500), phone VARCHAR(20), mobile VARCHAR(20), "
+                    + "email VARCHAR(100), address TEXT, contact_person VARCHAR(255), "
+                    + "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) "
+                    + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS party_delegates ("
+                    + "id INT AUTO_INCREMENT PRIMARY KEY, party_code VARCHAR(20) NOT NULL, "
+                    + "delegate_name VARCHAR(255) NOT NULL, job_title VARCHAR(255), "
+                    + "authorization_doc_path VARCHAR(500), "
+                    + "FOREIGN KEY (party_code) REFERENCES business_parties(code) ON DELETE CASCADE) "
+                    + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS document_attachments ("
+                    + "id INT AUTO_INCREMENT PRIMARY KEY, party_code VARCHAR(20) NOT NULL, "
+                    + "doc_type VARCHAR(50), file_path VARCHAR(500), description TEXT, "
+                    + "uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                    + "FOREIGN KEY (party_code) REFERENCES business_parties(code) ON DELETE CASCADE) "
+                    + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            stmt.executeUpdate("ALTER TABLE business_parties ADD COLUMN IF NOT EXISTS sub_account_code VARCHAR(20) AFTER parent_account_code");
+            stmt.executeUpdate("ALTER TABLE business_parties ADD COLUMN IF NOT EXISTS vat_number VARCHAR(20) AFTER balance_type");
+            stmt.executeUpdate("ALTER TABLE business_parties ADD COLUMN IF NOT EXISTS cr_number VARCHAR(50) AFTER vat_number");
+            stmt.executeUpdate("ALTER TABLE business_parties ADD COLUMN IF NOT EXISTS cr_image_path VARCHAR(500) AFTER cr_number");
+            stmt.executeUpdate("ALTER TABLE business_parties ADD COLUMN IF NOT EXISTS phone VARCHAR(20) AFTER cr_image_path");
+            stmt.executeUpdate("ALTER TABLE business_parties ADD COLUMN IF NOT EXISTS mobile VARCHAR(20) AFTER phone");
+            stmt.executeUpdate("ALTER TABLE business_parties ADD COLUMN IF NOT EXISTS email VARCHAR(100) AFTER mobile");
+            stmt.executeUpdate("ALTER TABLE business_parties ADD COLUMN IF NOT EXISTS address TEXT AFTER email");
+            stmt.executeUpdate("ALTER TABLE business_parties ADD COLUMN IF NOT EXISTS contact_person VARCHAR(255) AFTER address");
         } catch (SQLException e) {
             e.printStackTrace();
+            JOptionPane.showMessageDialog(null, "فشل تهيئة جداول الموردين والعملاء: " + e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    // =========================================================================
+    // التحقق من تكرار الكود أو الاسم أو الرقم الضريبي
+    // =========================================================================
+    public static boolean isPartyCodeExists(String code) {
+        String sql = "SELECT 1 FROM business_parties WHERE code = ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, code);
+            try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
+        } catch (SQLException e) { return false; }
+    }
+
+    public static boolean isPartyArNameExists(String arName, String excludeCode) {
+        String sql = "SELECT 1 FROM business_parties WHERE ar_name = ?" + (excludeCode != null ? " AND code != ?" : "");
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, arName);
+            if (excludeCode != null) ps.setString(2, excludeCode);
+            try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
+        } catch (SQLException e) { return false; }
+    }
+
+    public static boolean isVatNumberExists(String vatNumber, String excludeCode) {
+        String sql = "SELECT 1 FROM business_parties WHERE vat_number = ?" + (excludeCode != null ? " AND code != ?" : "");
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, vatNumber);
+            if (excludeCode != null) ps.setString(2, excludeCode);
+            try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
+        } catch (SQLException e) { return false; }
+    }
+
+    // =========================================================================
+    // توليد كود حساب فرعي تلقائي تحت الحساب الأب
+    // =========================================================================
+    public static String generatePartySubAccountCode(String parentCode) {
+        String sql = "SELECT MAX(account_code) FROM chart_of_accounts WHERE account_code LIKE ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, parentCode + "%");
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next() && rs.getObject(1) != null) {
+                    String maxCode = rs.getString(1);
+                    String suffix = maxCode.substring(parentCode.length());
+                    int nextNum = Integer.parseInt(suffix.isEmpty() ? "0" : suffix) + 1;
+                    return parentCode + String.format("%02d", nextNum);
+                }
+            }
+} catch (SQLException ignored) {
+            return parentCode + "01";
+        }
+        return parentCode + "01";
+    }
+
+    // =========================================================================
+    // حفظ بيانات الجهة + الحساب الفرعي + المفوضين + القيد الافتتاحي في معاملة واحدة
+    // =========================================================================
+    public static boolean savePartyWithAccount(Connection conn, String code, String arName, String enName,
+            String partyType, String ownerName, String parentAccountCode, String subAccountCode,
+            double creditLimit, int creditPeriodDays, String currencyCode,
+            double openingBalance, String balanceType, String vatNumber, String crNumber,
+            String crImagePath, String phone, String mobile, String email,
+            String address, String contactPerson, java.util.List<String[]> delegates) throws SQLException {
+        conn.setAutoCommit(false);
+        try {
+            String sqlParty = "INSERT INTO business_parties (code, ar_name, en_name, party_type, owner_name, "
+                    + "parent_account_code, sub_account_code, credit_limit, credit_period_days, currency_code, "
+                    + "opening_balance, balance_type, vat_number, cr_number, cr_image_path, phone, mobile, email, address, contact_person) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            try (PreparedStatement ps = conn.prepareStatement(sqlParty)) {
+                ps.setString(1, code); ps.setString(2, arName); ps.setString(3, enName);
+                ps.setString(4, partyType); ps.setString(5, ownerName);
+                ps.setString(6, parentAccountCode); ps.setString(7, subAccountCode);
+                ps.setDouble(8, creditLimit); ps.setInt(9, creditPeriodDays); ps.setString(10, currencyCode);
+                ps.setDouble(11, openingBalance); ps.setString(12, balanceType);
+                ps.setString(13, vatNumber); ps.setString(14, crNumber); ps.setString(15, crImagePath);
+                ps.setString(16, phone); ps.setString(17, mobile); ps.setString(18, email);
+                ps.setString(19, address); ps.setString(20, contactPerson);
+                ps.executeUpdate();
+            }
+
+            String sqlInsertAccount = "INSERT INTO chart_of_accounts (account_code, account_name, account_type, parent_code, account_level, is_sub_account, current_balance, currency) "
+                    + "VALUES (?, ?, ?, ?, 6, 1, ?, ?)";
+            String accountType = "supplier".equals(partyType) ? "LIABILITY" : "ASSET";
+            String accountName = arName + " (" + partyType + ")";
+            try (PreparedStatement ps = conn.prepareStatement(sqlInsertAccount)) {
+                ps.setString(1, subAccountCode); ps.setString(2, accountName);
+                ps.setString(3, accountType); ps.setString(4, parentAccountCode);
+                ps.setDouble(5, openingBalance); ps.setString(6, currencyCode);
+                ps.executeUpdate();
+            }
+
+            if (delegates != null) {
+                String sqlDelegate = "INSERT INTO party_delegates (party_code, delegate_name, job_title, authorization_doc_path) VALUES (?, ?, ?, ?)";
+                try (PreparedStatement ps = conn.prepareStatement(sqlDelegate)) {
+                    for (String[] d : delegates) {
+                        ps.setString(1, code); ps.setString(2, d[0]); ps.setString(3, d[1]); ps.setString(4, d[2]);
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+            }
+
+            if (openingBalance > 0) {
+                String entryNo = "JV-OPEN-" + code;
+                String narration = "قيد افتتاحي " + arName;
+                String entrySql = "INSERT INTO journal_entries (entry_number, entry_date, reference_doc, source_module, narration, total_debit, total_credit, posted_by) "
+                        + "VALUES (?, CURDATE(), ?, ?, ?, ?, ?, 'النظام الآلي')";
+                String lineSql = "INSERT INTO journal_entry_lines (entry_id, account_code, line_narration, debit_amount, credit_amount) VALUES (?, ?, ?, ?, ?)";
+
+                double amount = openingBalance;
+                String OPENING_BALANCE_ACC = "3101";
+                String debitAcc = "debit".equals(balanceType) ? subAccountCode : OPENING_BALANCE_ACC;
+                String creditAcc = "debit".equals(balanceType) ? OPENING_BALANCE_ACC : subAccountCode;
+
+                try (PreparedStatement psEntry = conn.prepareStatement(entrySql, Statement.RETURN_GENERATED_KEYS)) {
+                    psEntry.setString(1, entryNo); psEntry.setString(2, entryNo);
+                    psEntry.setString(3, "OPENING"); psEntry.setString(4, narration);
+                    psEntry.setDouble(5, "debit".equals(balanceType) ? amount : 0);
+                    psEntry.setDouble(6, "credit".equals(balanceType) ? amount : 0);
+                    psEntry.executeUpdate();
+                    try (ResultSet rs = psEntry.getGeneratedKeys()) {
+                        if (rs.next()) {
+                            long entryId = rs.getLong(1);
+                            try (PreparedStatement psLine = conn.prepareStatement(lineSql)) {
+                                psLine.setLong(1, entryId); psLine.setString(2, debitAcc);
+                                psLine.setString(3, "رصيد افتتاحي - " + arName);
+                                psLine.setDouble(4, "debit".equals(balanceType) ? amount : 0);
+                                psLine.setDouble(5, "credit".equals(balanceType) ? amount : 0);
+                                psLine.executeUpdate();
+                                try (PreparedStatement psLine2 = conn.prepareStatement(lineSql)) {
+                                    psLine2.setLong(1, entryId); psLine2.setString(2, creditAcc);
+                                    psLine2.setString(3, "رصيد افتتاحي - " + arName);
+                                    psLine2.setDouble(4, "credit".equals(balanceType) ? amount : 0);
+                                    psLine2.setDouble(5, "debit".equals(balanceType) ? amount : 0);
+                                    psLine2.executeUpdate();
+                                }
+                            }
+                        }
+                    }
+                }
+                try (PreparedStatement psUpdate = conn.prepareStatement("UPDATE chart_of_accounts SET current_balance = current_balance + ? WHERE account_code = ?")) {
+                    psUpdate.setDouble(1, amount); psUpdate.setString(2, subAccountCode);
+                    psUpdate.executeUpdate();
+                }
+            }
+
+            conn.commit();
+            return true;
+        } catch (SQLException e) {
+            conn.rollback();
+            throw e;
+        } finally {
+            conn.setAutoCommit(true);
+        }
+    }
+
+    // =========================================================================
+    // تحديث بيانات الجهة + الحساب الفرعي + المفوضين + القيد الافتتاحي في معاملة واحدة
+    // =========================================================================
+    public static boolean updatePartyWithAccount(Connection conn, String code, String arName, String enName,
+            String partyType, String ownerName, String parentAccountCode, String subAccountCode,
+            double creditLimit, int creditPeriodDays, String currencyCode,
+            double openingBalance, String balanceType, String vatNumber, String crNumber,
+            String crImagePath, String phone, String mobile, String email,
+            String address, String contactPerson, java.util.List<String[]> delegates) throws SQLException {
+        conn.setAutoCommit(false);
+        try {
+            String sqlParty = "UPDATE business_parties SET ar_name = ?, en_name = ?, owner_name = ?, "
+                    + "parent_account_code = ?, sub_account_code = ?, credit_limit = ?, credit_period_days = ?, "
+                    + "currency_code = ?, opening_balance = ?, balance_type = ?, vat_number = ?, cr_number = ?, "
+                    + "cr_image_path = ?, phone = ?, mobile = ?, email = ?, address = ?, contact_person = ? "
+                    + "WHERE code = ?";
+            try (PreparedStatement ps = conn.prepareStatement(sqlParty)) {
+                ps.setString(1, arName); ps.setString(2, enName);
+                ps.setString(3, ownerName);
+                ps.setString(4, parentAccountCode); ps.setString(5, subAccountCode);
+                ps.setDouble(6, creditLimit); ps.setInt(7, creditPeriodDays); ps.setString(8, currencyCode);
+                ps.setDouble(9, openingBalance); ps.setString(10, balanceType);
+                ps.setString(11, vatNumber); ps.setString(12, crNumber); ps.setString(13, crImagePath);
+                ps.setString(14, phone); ps.setString(15, mobile); ps.setString(16, email);
+                ps.setString(17, address); ps.setString(18, contactPerson);
+                ps.setString(19, code);
+                ps.executeUpdate();
+            }
+
+            String accountType = "supplier".equals(partyType) ? "LIABILITY" : "ASSET";
+            String accountName = arName + " (" + partyType + ")";
+            String sqlUpdateAccount = "UPDATE chart_of_accounts SET account_name = ?, account_type = ?, parent_code = ?, current_balance = ? "
+                    + "WHERE account_code = ?";
+            try (PreparedStatement ps = conn.prepareStatement(sqlUpdateAccount)) {
+                ps.setString(1, accountName); ps.setString(2, accountType);
+                ps.setString(3, parentAccountCode); ps.setDouble(4, openingBalance);
+                ps.setString(5, subAccountCode);
+                ps.executeUpdate();
+            }
+
+            String sqlDeleteDelegates = "DELETE FROM party_delegates WHERE party_code = ?";
+            try (PreparedStatement ps = conn.prepareStatement(sqlDeleteDelegates)) {
+                ps.setString(1, code); ps.executeUpdate();
+            }
+            if (delegates != null && !delegates.isEmpty()) {
+                String sqlDelegate = "INSERT INTO party_delegates (party_code, delegate_name, job_title, authorization_doc_path) VALUES (?, ?, ?, ?)";
+                try (PreparedStatement ps = conn.prepareStatement(sqlDelegate)) {
+                    for (String[] d : delegates) {
+                        ps.setString(1, code); ps.setString(2, d[0]); ps.setString(3, d[1]); ps.setString(4, d[2]);
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+            }
+
+            String sqlDeleteAttachments = "DELETE FROM document_attachments WHERE party_code = ?";
+            try (PreparedStatement ps = conn.prepareStatement(sqlDeleteAttachments)) {
+                ps.setString(1, code); ps.executeUpdate();
+            }
+            if (crImagePath != null && !crImagePath.isEmpty()) {
+                String sqlAttach = "INSERT INTO document_attachments (party_code, doc_type, file_path, description) VALUES (?, ?, ?, ?)";
+                try (PreparedStatement ps = conn.prepareStatement(sqlAttach)) {
+                    ps.setString(1, code); ps.setString(2, "cr_image"); ps.setString(3, crImagePath);
+                    ps.setString(4, "صورة السجل التجاري");
+                    ps.executeUpdate();
+                }
+            }
+
+            if (openingBalance > 0) {
+                String entryNo = "JV-OPEN-" + code;
+                String narration = "قيد افتتاحي " + arName;
+                String checkSql = "SELECT entry_id FROM journal_entries WHERE entry_number = ?";
+                long entryId = -1;
+                try (PreparedStatement psCheck = conn.prepareStatement(checkSql)) {
+                    psCheck.setString(1, entryNo);
+                    try (ResultSet rs = psCheck.executeQuery()) {
+                        if (rs.next()) { entryId = rs.getLong(1); }
+                    }
+                }
+                String OPENING_BALANCE_ACC = "3101";
+                String debitAcc = "debit".equals(balanceType) ? subAccountCode : OPENING_BALANCE_ACC;
+                String creditAcc = "debit".equals(balanceType) ? OPENING_BALANCE_ACC : subAccountCode;
+
+                if (entryId > 0) {
+                    String updEntry = "UPDATE journal_entries SET total_debit = ?, total_credit = ?, narration = ? WHERE entry_id = ?";
+                    try (PreparedStatement psUpd = conn.prepareStatement(updEntry)) {
+                        psUpd.setDouble(1, "debit".equals(balanceType) ? openingBalance : 0);
+                        psUpd.setDouble(2, "credit".equals(balanceType) ? openingBalance : 0);
+                        psUpd.setString(3, narration);
+                        psUpd.setLong(4, entryId);
+                        psUpd.executeUpdate();
+                    }
+                    String delLines = "DELETE FROM journal_entry_lines WHERE entry_id = ?";
+                    try (PreparedStatement psDel = conn.prepareStatement(delLines)) {
+                        psDel.setLong(1, entryId); psDel.executeUpdate();
+                    }
+                    String insLine = "INSERT INTO journal_entry_lines (entry_id, account_code, line_narration, debit_amount, credit_amount) VALUES (?, ?, ?, ?)";
+                    try (PreparedStatement psL1 = conn.prepareStatement(insLine)) {
+                        psL1.setLong(1, entryId); psL1.setString(2, debitAcc);
+                        psL1.setString(3, "رصيد افتتاحي - " + arName);
+                        psL1.setDouble(4, "debit".equals(balanceType) ? openingBalance : 0);
+                        psL1.setDouble(5, "credit".equals(balanceType) ? openingBalance : 0);
+                        psL1.executeUpdate();
+                    }
+                    try (PreparedStatement psL2 = conn.prepareStatement(insLine)) {
+                        psL2.setLong(1, entryId); psL2.setString(2, creditAcc);
+                        psL2.setString(3, "رصيد افتتاحي - " + arName);
+                        psL2.setDouble(4, "credit".equals(balanceType) ? openingBalance : 0);
+                        psL2.setDouble(5, "debit".equals(balanceType) ? openingBalance : 0);
+                        psL2.executeUpdate();
+                    }
+                } else {
+                    String entrySql = "INSERT INTO journal_entries (entry_number, entry_date, reference_doc, source_module, narration, total_debit, total_credit, posted_by) "
+                            + "VALUES (?, CURDATE(), ?, ?, ?, ?, ?, 'النظام الآلي')";
+                    String lineSql = "INSERT INTO journal_entry_lines (entry_id, account_code, line_narration, debit_amount, credit_amount) VALUES (?, ?, ?, ?, ?)";
+                    try (PreparedStatement psEntry = conn.prepareStatement(entrySql, Statement.RETURN_GENERATED_KEYS)) {
+                        psEntry.setString(1, entryNo); psEntry.setString(2, entryNo);
+                        psEntry.setString(3, "OPENING"); psEntry.setString(4, narration);
+                        psEntry.setDouble(5, "debit".equals(balanceType) ? openingBalance : 0);
+                        psEntry.setDouble(6, "credit".equals(balanceType) ? openingBalance : 0);
+                        psEntry.executeUpdate();
+                        try (ResultSet rs = psEntry.getGeneratedKeys()) {
+                            if (rs.next()) {
+                                long newEntryId = rs.getLong(1);
+                                try (PreparedStatement psL1 = conn.prepareStatement(lineSql)) {
+                                    psL1.setLong(1, newEntryId); psL1.setString(2, debitAcc);
+                                    psL1.setString(3, "رصيد افتتاحي - " + arName);
+                                    psL1.setDouble(4, "debit".equals(balanceType) ? openingBalance : 0);
+                                    psL1.setDouble(5, "credit".equals(balanceType) ? openingBalance : 0);
+                                    psL1.executeUpdate();
+                                }
+                                try (PreparedStatement psL2 = conn.prepareStatement(lineSql)) {
+                                    psL2.setLong(1, newEntryId); psL2.setString(2, creditAcc);
+                                    psL2.setString(3, "رصيد افتتاحي - " + arName);
+                                    psL2.setDouble(4, "credit".equals(balanceType) ? openingBalance : 0);
+                                    psL2.setDouble(5, "debit".equals(balanceType) ? openingBalance : 0);
+                                    psL2.executeUpdate();
+                                }
+                            }
+                        }
+                    }
+                }
+                try (PreparedStatement psUpdAcc = conn.prepareStatement("UPDATE chart_of_accounts SET current_balance = ? WHERE account_code = ?")) {
+                    psUpdAcc.setDouble(1, openingBalance); psUpdAcc.setString(2, subAccountCode);
+                    psUpdAcc.executeUpdate();
+                }
+            } else {
+                String delEntry = "DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT entry_id FROM journal_entries WHERE entry_number = ?)";
+                try (PreparedStatement psDelL = conn.prepareStatement(delEntry)) {
+                    psDelL.setString(1, "JV-OPEN-" + code); psDelL.executeUpdate();
+                }
+                try (PreparedStatement psDelE = conn.prepareStatement("DELETE FROM journal_entries WHERE entry_number = ?")) {
+                    psDelE.setString(1, "JV-OPEN-" + code); psDelE.executeUpdate();
+                }
+            }
+
+            conn.commit();
+            return true;
+        } catch (SQLException e) {
+            conn.rollback();
+            throw e;
+        } finally {
+            conn.setAutoCommit(true);
+        }
+    }
+
+    // =========================================================================
+    // قراءة جميع الموردين/العملاء مع الفلترة
+    // =========================================================================
+    public static ResultSet getPartyList(String partyType, String searchText) throws SQLException {
+        StringBuilder sql = new StringBuilder("SELECT * FROM business_parties WHERE 1=1");
+        java.util.ArrayList<String> params = new java.util.ArrayList<>();
+        if (partyType != null && !partyType.isEmpty()) { sql.append(" AND party_type = ?"); params.add(partyType); }
+        if (searchText != null && !searchText.isEmpty()) {
+            sql.append(" AND (ar_name LIKE ? OR code LIKE ? OR vat_number LIKE ?)");
+            params.add("%" + searchText + "%"); params.add("%" + searchText + "%"); params.add("%" + searchText + "%");
+        }
+        sql.append(" ORDER BY created_at DESC");
+        Connection conn = getConnection();
+        PreparedStatement ps = conn.prepareStatement(sql.toString());
+        for (int i = 0; i < params.size(); i++) { ps.setString(i + 1, params.get(i)); }
+        return ps.executeQuery();
+    }
+
+    public static ResultSet getDelegates(String partyCode) throws SQLException {
+        String sql = "SELECT * FROM party_delegates WHERE party_code = ?";
+        Connection conn = getConnection();
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setString(1, partyCode);
+        return ps.executeQuery();
+    }
+
+    public static ResultSet getAttachments(String partyCode) throws SQLException {
+        String sql = "SELECT * FROM document_attachments WHERE party_code = ?";
+        Connection conn = getConnection();
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setString(1, partyCode);
+        return ps.executeQuery();
+    }
+
+    // =========================================================================
+    // حذف جهة
+    // =========================================================================
+    public static boolean deleteParty(String code) {
+        String subCode = null;
+        try (Connection conn = getConnection(); PreparedStatement psRead = conn.prepareStatement("SELECT sub_account_code FROM business_parties WHERE code = ?")) {
+            psRead.setString(1, code);
+            try (ResultSet rs = psRead.executeQuery()) { if (rs.next()) subCode = rs.getString(1); }
+        } catch (SQLException e) { e.printStackTrace(); return false; }
+        try (Connection conn = getConnection()) {
+            try (PreparedStatement psDelLines = conn.prepareStatement("DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT entry_id FROM journal_entries WHERE entry_number = ?)")) {
+                psDelLines.setString(1, "JV-OPEN-" + code); psDelLines.executeUpdate();
+            }
+            try (PreparedStatement psDelEntry = conn.prepareStatement("DELETE FROM journal_entries WHERE entry_number = ?")) {
+                psDelEntry.setString(1, "JV-OPEN-" + code); psDelEntry.executeUpdate();
+            }
+            try (PreparedStatement ps = conn.prepareStatement("DELETE FROM business_parties WHERE code = ?")) {
+                ps.setString(1, code);
+                int rows = ps.executeUpdate();
+                if (rows > 0 && subCode != null) {
+                    try (PreparedStatement psAcc = conn.prepareStatement("DELETE FROM chart_of_accounts WHERE account_code = ?")) {
+                        psAcc.setString(1, subCode); psAcc.executeUpdate();
+                    }
+                }
+                conn.commit();
+                return rows > 0;
+            } catch (SQLException e) {
+                try { conn.rollback(); } catch (SQLException rb) {}
+                return false;
+            }
+        } catch (SQLException e) { e.printStackTrace(); return false; }
     }
 }
