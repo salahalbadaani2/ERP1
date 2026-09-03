@@ -33,7 +33,8 @@ public class BusinessPartySetupFrame extends JFrame {
     private String editCode = null;
     private boolean isEditMode = false;
 
-    private JTextField txtCode, txtArName, txtEnName, txtOwnerName, txtCity;
+    private JTextField txtCode, txtEnName, txtOwnerName, txtCity;
+    private JComboBox<String> cmbAccountName;
     private JComboBox<String> cmbStatus, cmbBalanceType, cmbCurrency, cmbPartyType;
     private JTextField txtParentAccount, txtSubAccount, txtOpeningBalance;
     private JTextField txtCreditLimit, txtCreditPeriod, txtVatNumber, txtCrNumber;
@@ -55,7 +56,6 @@ public class BusinessPartySetupFrame extends JFrame {
         };
         this.delegateTable = new JTable(delegateModel);
         this.txtCode = new JTextField();
-        this.txtArName = new JTextField();
         this.txtEnName = new JTextField();
         this.txtOwnerName = new JTextField();
         this.txtCity = new JTextField();
@@ -227,19 +227,21 @@ public class BusinessPartySetupFrame extends JFrame {
 
         int row = 0;
         addLabelField(form, gc, row++, "كود الجهة:", txtCode = new JTextField(18));
-        txtArName = new JTextField(20);
+        cmbAccountName = new JComboBox<>();
+        cmbAccountName.setEditable(true);
+        cmbAccountName.addItem("... اختر أو اكتب للبحث في الشجرة");
+        cmbAccountName.setSelectedIndex(0);
+        styleField(cmbAccountName);
+        cmbAccountName.addActionListener(e -> selectAccountFromCombo());
 
         JPanel namePanel = new JPanel(new BorderLayout(8, 0));
         namePanel.setOpaque(false);
         namePanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        namePanel.add(txtArName, BorderLayout.CENTER);
-        JButton btnLookup = new JButton("بحث");
-        styleToolbarButton(btnLookup, PRIMARY_COLOR, new Color(15, 23, 42));
-        btnLookup.addActionListener(e -> {
-            JPopupMenu accountPopup = new JPopupMenu();
-            showPartySuggestions(accountPopup);
-        });
-        namePanel.add(btnLookup, BorderLayout.EAST);
+        namePanel.add(cmbAccountName, BorderLayout.CENTER);
+        JButton btnDirectory = new JButton("دليل الحسابات");
+        styleToolbarButton(btnDirectory, PRIMARY_COLOR, new Color(15, 23, 42));
+        btnDirectory.addActionListener(e -> openAccountTree());
+        namePanel.add(btnDirectory, BorderLayout.EAST);
         addLabelField(form, gc, row++, "الاسم التجاري *:", namePanel);
 
         addLabelField(form, gc, row++, "اسم المالك:", txtOwnerName = new JTextField(20));
@@ -297,12 +299,13 @@ public class BusinessPartySetupFrame extends JFrame {
         JPopupMenu popup = new JPopupMenu();
         Timer debounce = new Timer(180, e -> showPartySuggestions(popup));
         debounce.setRepeats(false);
-        txtArName.getDocument().addDocumentListener(new DocumentListener() {
+        JTextField editor = getAccountEditor();
+        editor.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { debounce.restart(); }
             public void removeUpdate(DocumentEvent e) { debounce.restart(); }
             public void changedUpdate(DocumentEvent e) { debounce.restart(); }
         });
-        txtArName.addMouseListener(new MouseAdapter() {
+        editor.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
                 if (event.getClickCount() == 2) {
@@ -312,13 +315,52 @@ public class BusinessPartySetupFrame extends JFrame {
         });
     }
 
+    private JTextField getAccountEditor() {
+        return (JTextField) cmbAccountName.getEditor().getEditorComponent();
+    }
+
+    private String getCommercialName() {
+        String value = getAccountEditor().getText().trim();
+        if (value.contains(" - ")) {
+            return value.substring(value.indexOf(" - ") + 3).trim();
+        }
+        return value;
+    }
+
+    private void setCommercialName(String name) {
+        getAccountEditor().setText(name == null ? "" : name);
+    }
+
+    private void setAccountSelection(String code, String name) {
+        String display = code + " - " + name;
+        boolean found = false;
+        for (int i = 0; i < cmbAccountName.getItemCount(); i++) {
+            if (display.equals(cmbAccountName.getItemAt(i))) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) cmbAccountName.addItem(display);
+        cmbAccountName.setSelectedItem(display);
+        txtSubAccount.setText(code);
+        setCommercialName(name);
+    }
+
+    private void selectAccountFromCombo() {
+        Object selected = cmbAccountName.getSelectedItem();
+        if (selected == null) return;
+        String value = selected.toString();
+        if (!value.contains(" - ")) return;
+        String[] parts = value.split(" - ", 2);
+        setAccountSelection(parts[0].trim(), parts[1].trim());
+    }
+
     private void openAccountTree() {
         String prefix = "supplier".equals(partyType) ? "2" : "12";
         AccountTreeDialog dialog = new AccountTreeDialog(this, prefix);
         dialog.setVisible(true);
         if (dialog.isAccountSelected()) {
             String code = dialog.getSelectedAccountCode();
-            txtSubAccount.setText(code);
             loadAccountName(code);
         }
     }
@@ -331,7 +373,7 @@ public class BusinessPartySetupFrame extends JFrame {
             ps.setString(1, accountCode);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    txtArName.setText(rs.getString("account_name"));
+                    setAccountSelection(accountCode, rs.getString("account_name"));
                 }
             }
         } catch (SQLException ex) {
@@ -472,7 +514,7 @@ public class BusinessPartySetupFrame extends JFrame {
     }
 
     private void lookupPartyByName() {
-        String value = txtArName.getText().trim();
+        String value = getCommercialName();
         if (value.isEmpty()) {
             JOptionPane.showMessageDialog(this, "يرجى إدخال اسم تجاري للبحث", "تنبيه", JOptionPane.WARNING_MESSAGE);
             return;
@@ -496,9 +538,9 @@ public class BusinessPartySetupFrame extends JFrame {
         }
     }
 
-    private void showPartySuggestions(JPopupMenu popup) {
-        String value = txtArName.getText().trim();
-        if (value.isEmpty()) { popup.setVisible(false); return; }
+    private void showPartySuggestions(JPopupMenu unusedPopup) {
+        String value = getCommercialName();
+        if (value.isEmpty()) return;
         String accountType = "supplier".equals(partyType) ? "LIABILITY" : "ASSET";
         String sql = "SELECT account_code, account_name FROM chart_of_accounts "
                 + "WHERE is_sub_account = 1 AND account_type = ? "
@@ -513,24 +555,16 @@ public class BusinessPartySetupFrame extends JFrame {
                 while (rs.next()) {
                     options.add(rs.getString("account_code") + " - " + rs.getString("account_name"));
                 }
-                if (options.isEmpty()) { popup.setVisible(false); return; }
-                popup.removeAll();
-                for (String option : options) {
-                    JMenuItem item = new JMenuItem(option);
-                    item.addActionListener(ev -> {
-                        String[] parts = option.split(" - ", 2);
-                        txtSubAccount.setText(parts[0]);
-                        txtArName.setText(parts.length > 1 ? parts[1] : "");
-                        popup.setVisible(false);
-                    });
-                    popup.add(item);
-                }
-                    popup.show(txtArName, 0, txtArName.getHeight());
+                String editorText = getAccountEditor().getText();
+                cmbAccountName.removeAllItems();
+                cmbAccountName.addItem("... اختر أو اكتب للبحث في الشجرة");
+                for (String option : options) cmbAccountName.addItem(option);
+                getAccountEditor().setText(editorText);
+                if (!options.isEmpty()) cmbAccountName.showPopup();
             }
         } catch (SQLException ex) {
-            popup.setVisible(false);
-                JOptionPane.showMessageDialog(this, "فشل البحث في شجرة الحسابات: " + ex.getMessage(),
-                        "خطأ", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "فشل البحث في شجرة الحسابات: " + ex.getMessage(),
+                    "خطأ", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -541,7 +575,7 @@ public class BusinessPartySetupFrame extends JFrame {
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     txtCode.setText(rs.getString("code"));
-                    txtArName.setText(rs.getString("ar_name"));
+                    setCommercialName(rs.getString("ar_name"));
                     txtOwnerName.setText(rs.getString("owner_name") != null ? rs.getString("owner_name") : "");
                     txtSubAccount.setText(rs.getString("sub_account_code") != null ? rs.getString("sub_account_code") : "");
                     txtPhone.setText(rs.getString("phone") != null ? rs.getString("phone") : "");
@@ -725,7 +759,7 @@ public class BusinessPartySetupFrame extends JFrame {
         editCode = null;
         clearForm();
         generateCode();
-        txtArName.requestFocus();
+        getAccountEditor().requestFocus();
     }
 
     private void saveParty() {
@@ -736,7 +770,7 @@ public class BusinessPartySetupFrame extends JFrame {
             return;
         }
 
-        if (DatabaseManager.isPartyArNameExists(txtArName.getText().trim(), isEditMode ? editCode : null)) {
+        if (DatabaseManager.isPartyArNameExists(getCommercialName(),  isEditMode ? editCode : null)) {
             JOptionPane.showMessageDialog(this, "الاسم التجاري موجود مسبقاً", "تنبيه", JOptionPane.WARNING_MESSAGE);
             return;
         }
@@ -768,7 +802,7 @@ public class BusinessPartySetupFrame extends JFrame {
             boolean success;
             if (isEditMode) {
                 success = DatabaseManager.updatePartyWithAccount(conn,
-                        txtCode.getText().trim(), txtArName.getText().trim(), txtEnName.getText().trim(),
+                        txtCode.getText().trim(), getCommercialName(), txtEnName.getText().trim(),
                         partyType, txtOwnerName.getText().trim(), "121",
                         txtSubAccount.getText().trim(),
                         parseDouble(txtCreditLimit.getText()), parseInt(txtCreditPeriod.getText()),
@@ -781,7 +815,7 @@ public class BusinessPartySetupFrame extends JFrame {
                         delegates);
             } else {
                 success = DatabaseManager.savePartyWithAccount(conn,
-                        txtCode.getText().trim(), txtArName.getText().trim(), txtEnName.getText().trim(),
+                        txtCode.getText().trim(), getCommercialName(), txtEnName.getText().trim(),
                         partyType, txtOwnerName.getText().trim(), "121",
                         txtSubAccount.getText().trim(),
                         parseDouble(txtCreditLimit.getText()), parseInt(txtCreditPeriod.getText()),
@@ -806,7 +840,7 @@ public class BusinessPartySetupFrame extends JFrame {
     }
 
     private boolean hasSimilarAccountName() {
-        String term = txtArName.getText().trim();
+        String term = getCommercialName();
         if (term.isEmpty()) return false;
 
         StringBuilder names = new StringBuilder();
@@ -930,7 +964,7 @@ public class BusinessPartySetupFrame extends JFrame {
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     txtCode.setText(rs.getString("code"));
-                    txtArName.setText(rs.getString("ar_name"));
+                    setCommercialName(rs.getString("ar_name"));
                     txtEnName.setText(rs.getString("en_name") != null ? rs.getString("en_name") : "");
                     partyType = rs.getString("party_type");
                     if (rs.getString("party_type") != null) cmbPartyType.setSelectedItem(rs.getString("party_type"));
@@ -975,7 +1009,7 @@ public class BusinessPartySetupFrame extends JFrame {
     private void clearForm() {
         isEditMode = false;
         editCode = null;
-        txtCode.setText(""); txtArName.setText(""); txtEnName.setText("");
+        txtCode.setText(""); setCommercialName(""); txtEnName.setText("");
         txtOwnerName.setText(""); txtParentAccount.setText(""); txtSubAccount.setText("");
         txtOpeningBalance.setText(""); txtCreditLimit.setText(""); txtCreditPeriod.setText("");
         txtVatNumber.setText(""); txtCrNumber.setText(""); txtCrImagePath.setText("");
@@ -991,9 +1025,9 @@ public class BusinessPartySetupFrame extends JFrame {
     }
 
     private boolean validateInput() {
-        if (txtArName.getText().trim().isEmpty()) {
+        if (getCommercialName().isEmpty()) {
             JOptionPane.showMessageDialog(this, "يجب إدخال الاسم التجاري", "تنبيه", JOptionPane.WARNING_MESSAGE);
-            txtArName.requestFocus();
+            getAccountEditor().requestFocus();
             return false;
         }
         return true;
