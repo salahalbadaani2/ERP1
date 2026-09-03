@@ -159,6 +159,8 @@ public class BusinessPartySetupFrame extends JFrame {
         button.setFont(new Font("Tahoma", Font.BOLD, 14));
         button.setBackground(background);
         button.setForeground(foreground);
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
         button.setBorder(BorderFactory.createCompoundBorder(
                 new RoundedBorder(background.darker(), 6), new EmptyBorder(4, 10, 4, 10)));
     }
@@ -219,7 +221,8 @@ public class BusinessPartySetupFrame extends JFrame {
         JPanel form = createCardPanel(new GridBagLayout());
         form.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         GridBagConstraints gc = new GridBagConstraints();
-        gc.fill = GridBagConstraints.HORIZONTAL;
+        gc.fill = GridBagConstraints.BOTH;
+        gc.weightx = 1.0;
         gc.insets = new Insets(8, 12, 8, 12);
 
         int row = 0;
@@ -231,7 +234,7 @@ public class BusinessPartySetupFrame extends JFrame {
         namePanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         namePanel.add(txtArName, BorderLayout.CENTER);
         JButton btnLookup = new JButton("بحث");
-        styleToolbarButton(btnLookup, PRIMARY_COLOR, Color.WHITE);
+        styleToolbarButton(btnLookup, PRIMARY_COLOR, new Color(15, 23, 42));
         btnLookup.addActionListener(e -> {
             JPopupMenu accountPopup = new JPopupMenu();
             showPartySuggestions(accountPopup);
@@ -363,17 +366,17 @@ public class BusinessPartySetupFrame extends JFrame {
         buttons.setOpaque(false);
 
         JButton choose = new JButton("اختيار...");
-        styleToolbarButton(choose, PRIMARY_COLOR, Color.WHITE);
+        styleToolbarButton(choose, PRIMARY_COLOR, new Color(15, 23, 42));
         choose.addActionListener(e -> chooseImage(pathField, label));
         buttons.add(choose);
 
         JButton view = new JButton("عرض");
-        styleToolbarButton(view, SECONDARY_COLOR, Color.WHITE);
+        styleToolbarButton(view, SECONDARY_COLOR, new Color(15, 23, 42));
         view.addActionListener(e -> previewImage(pathField.getText().trim(), label));
         buttons.add(view);
 
         JButton print = new JButton("طباعة");
-        styleToolbarButton(print, SECONDARY_COLOR, Color.WHITE);
+        styleToolbarButton(print, SECONDARY_COLOR, new Color(15, 23, 42));
         print.addActionListener(e -> printImage(pathField.getText().trim(), label));
         buttons.add(print);
         actions.add(buttons, BorderLayout.EAST);
@@ -725,10 +728,12 @@ public class BusinessPartySetupFrame extends JFrame {
 
     private void saveParty() {
         if (!validateInput()) return;
+        if (hasSimilarAccountName()) return;
         if (DatabaseManager.isPartyCodeExists(txtCode.getText().trim()) && !isEditMode) {
             JOptionPane.showMessageDialog(this, "كود الجهة موجود مسبقاً", "تنبيه", JOptionPane.WARNING_MESSAGE);
             return;
         }
+
         if (DatabaseManager.isPartyArNameExists(txtArName.getText().trim(), isEditMode ? editCode : null)) {
             JOptionPane.showMessageDialog(this, "الاسم التجاري موجود مسبقاً", "تنبيه", JOptionPane.WARNING_MESSAGE);
             return;
@@ -796,6 +801,46 @@ public class BusinessPartySetupFrame extends JFrame {
             e.printStackTrace();
             JOptionPane.showMessageDialog(this, "فشل الحفظ: " + e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private boolean hasSimilarAccountName() {
+        String term = txtArName.getText().trim();
+        if (term.isEmpty()) return false;
+
+        StringBuilder names = new StringBuilder();
+        String accountSql = "SELECT account_code, account_name FROM chart_of_accounts "
+                + "WHERE is_sub_account = 1 AND account_name LIKE ? ORDER BY account_name LIMIT 10";
+        String partySql = "SELECT code, ar_name FROM business_parties WHERE ar_name LIKE ? "
+                + (isEditMode ? "AND code <> ? " : "") + "ORDER BY ar_name LIMIT 10";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement account = conn.prepareStatement(accountSql);
+             PreparedStatement party = conn.prepareStatement(partySql)) {
+            String pattern = "%" + term + "%";
+            account.setString(1, pattern);
+            try (ResultSet rs = account.executeQuery()) {
+                while (rs.next()) {
+                    names.append("حساب: ").append(rs.getString("account_code"))
+                            .append(" - ").append(rs.getString("account_name")).append("\n");
+                }
+            }
+            party.setString(1, pattern);
+            if (isEditMode) party.setString(2, editCode);
+            try (ResultSet rs = party.executeQuery()) {
+                while (rs.next()) {
+                    names.append("جهة: ").append(rs.getString("code"))
+                            .append(" - ").append(rs.getString("ar_name")).append("\n");
+                }
+            }
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "فشل التحقق من تشابه الاسم: " + ex.getMessage(),
+                    "خطأ", JOptionPane.ERROR_MESSAGE);
+            return true;
+        }
+        if (names.length() == 0) return false;
+        JOptionPane.showMessageDialog(this,
+                "يوجد اسم مطابق أو مشابه. راجع النتائج قبل فتح حساب جديد:\n\n" + names,
+                "تحذير: اسم مكرر أو مشابه", JOptionPane.WARNING_MESSAGE);
+        return true;
     }
 
     private void editParty() {
