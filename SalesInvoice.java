@@ -439,13 +439,14 @@ public class SalesInvoice extends JFrame {
 
             // 1. الترحيل الآمن إلى قاعدة بيانات MySQL (ACID Transaction)
             Connection conn = null;
+            long entryId = -1;
             try {
                 conn = DatabaseManager.getConnection();
                 conn.setAutoCommit(false);
 
                 String jvNo = "JV-SALES-" + txtInvoiceNo.getText().trim();
-                String sqlJv = "INSERT INTO journal_entries (entry_number, entry_date, reference_doc, source_module, narration, total_debit, total_credit, is_posted) VALUES (?, ?, ?, 'SALES', ?, ?, ?, 1)";
-                try (PreparedStatement pstmt = conn.prepareStatement(sqlJv)) {
+                String sqlJv = "INSERT INTO journal_entries (entry_number, entry_date, reference_doc, source_module, narration, total_debit, total_credit, posted_by) VALUES (?, ?, ?, 'SALES', ?, ?, ?, 'النظام الآلي')";
+                try (PreparedStatement pstmt = conn.prepareStatement(sqlJv, PreparedStatement.RETURN_GENERATED_KEYS)) {
                     pstmt.setString(1, jvNo);
                     pstmt.setString(2, txtDate.getText().trim());
                     pstmt.setString(3, txtInvoiceNo.getText().trim());
@@ -453,51 +454,59 @@ public class SalesInvoice extends JFrame {
                     pstmt.setDouble(5, totalCustomerCredit + totalCOGS);
                     pstmt.setDouble(6, totalCustomerCredit + totalCOGS);
                     pstmt.executeUpdate();
+                    try (ResultSet keys = pstmt.getGeneratedKeys()) {
+                        if (keys.next()) {
+                            entryId = keys.getLong(1);
+                        }
+                    }
+                }
+                if (entryId <= 0) {
+                    throw new SQLException("لم يتم توليد entry_id للقيد المحاسبي");
                 }
 
                 // خطوط القيد المالي المزدوج
-                String sqlLine = "INSERT INTO journal_entry_lines (entry_number, account_code, debit_amount, credit_amount, line_narration) VALUES (?, ?, ?, ?, ?)";
+                String sqlLine = "INSERT INTO journal_entry_lines (entry_id, account_code, line_narration, debit_amount, credit_amount) VALUES (?, ?, ?, ?, ?)";
                 try (PreparedStatement pstmt = conn.prepareStatement(sqlLine)) {
                     // من حـ/ العميل (مدين)
-                    pstmt.setString(1, jvNo);
+                    pstmt.setLong(1, entryId);
                     pstmt.setString(2, txtCustomerCode.getText().trim());
-                    pstmt.setDouble(3, totalCustomerCredit);
-                    pstmt.setDouble(4, 0.0);
-                    pstmt.setString(5, "استحقاق مبيعات");
+                    pstmt.setString(3, "استحقاق مبيعات");
+                    pstmt.setDouble(4, totalCustomerCredit);
+                    pstmt.setDouble(5, 0.0);
                     pstmt.executeUpdate();
 
                     // إلى حـ/ إيراد المبيعات (دائن)
-                    pstmt.setString(1, jvNo);
+                    pstmt.setLong(1, entryId);
                     pstmt.setString(2, "410101");
-                    pstmt.setDouble(3, 0.0);
-                    pstmt.setDouble(4, baseRevenue);
-                    pstmt.setString(5, "إيراد مبيعات تامة");
+                    pstmt.setString(3, "إيراد مبيعات تامة");
+                    pstmt.setDouble(4, 0.0);
+                    pstmt.setDouble(5, baseRevenue);
                     pstmt.executeUpdate();
 
                     // إلى حـ/ الضريبة (دائن)
                     if (taxAmount > 0) {
-                        pstmt.setString(1, jvNo);
+                        pstmt.setLong(1, entryId);
                         pstmt.setString(2, "220301");
-                        pstmt.setDouble(3, 0.0);
-                        pstmt.setDouble(4, taxAmount);
-                        pstmt.setString(5, "ضريبة القيمة المضافة 15%");
+                        pstmt.setString(3, "ضريبة القيمة المضافة 15%");
+                        pstmt.setDouble(4, 0.0);
+                        pstmt.setDouble(5, taxAmount);
                         pstmt.executeUpdate();
                     }
 
                     // من حـ/ COGS (مدين)
-                    pstmt.setString(1, jvNo);
+                    pstmt.setLong(1, entryId);
                     pstmt.setString(2, "510101");
-                    pstmt.setDouble(3, totalCOGS);
-                    pstmt.setDouble(4, 0.0);
-                    pstmt.setString(5, "تكلفة البضاعة المباعة");
+                    pstmt.setString(3, "تكلفة البضاعة المباعة");
+                    pstmt.setDouble(4, totalCOGS);
+                    pstmt.setDouble(5, 0.0);
                     pstmt.executeUpdate();
 
                     // إلى حـ/ مخزون الإنتاج التام (دائن بخفض المخزن)
-                    pstmt.setString(1, jvNo);
+                    pstmt.setLong(1, entryId);
                     pstmt.setString(2, txtProductCode.getText().trim());
-                    pstmt.setDouble(3, 0.0);
-                    pstmt.setDouble(4, totalCOGS);
-                    pstmt.setString(5, "صرف بضاعة تامة من المخزن");
+                    pstmt.setString(3, "صرف بضاعة تامة من المخزن");
+                    pstmt.setDouble(4, 0.0);
+                    pstmt.setDouble(5, totalCOGS);
                     pstmt.executeUpdate();
                 }
 
@@ -506,6 +515,7 @@ public class SalesInvoice extends JFrame {
                 if (conn != null) {
                     try { conn.rollback(); } catch (SQLException ignored) {}
                 }
+                throw ex;
             } finally {
                 if (conn != null) {
                     try { conn.setAutoCommit(true); } catch (SQLException ignored) {}

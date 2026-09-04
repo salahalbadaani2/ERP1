@@ -93,6 +93,24 @@ public class DatabaseManager {
             System.err.println("خطأ أثناء إنشاء قاعدة البيانات تلقائياً: " + e.getMessage());
         }
 
+        // ================================================================
+        // (M2) تعطيل أوامر CREATE/ALTER/DROP من هذا الملف بقرار خطة التوحيد:
+        //  - بنية الجداول تُدار من schema.sql (يدوياً) + DatabaseAutoMigration.run().
+        //  - DatabaseManager للاتصال وعمليات البيانات والمعاملات فقط.
+        //  - النص الأصلي محفوظ داخل if(false) ويُستعاد من git tag:
+        //    backup-before-schema-fix-*  عند الحاجة.
+        // ================================================================
+        try (Connection conn = getConnection()) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.executeQuery("SELECT 1");
+            }
+            System.out.println("=== تم التأكد من الاتصال بقاعدة البيانات erp_factory_db (بدون DDL) ===");
+        } catch (SQLException e) {
+            System.err.println("خطأ أثناء فحص اتصال قاعدة البيانات: " + e.getMessage());
+            return;
+        }
+
+        if (false) {
         try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
             
             // 2. تعديل ترميز قاعدة البيانات القائمة لدعم النصوص العربية بالكامل
@@ -311,9 +329,10 @@ public class DatabaseManager {
             stmt.executeUpdate("ALTER TABLE treasury_vouchers CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
             stmt.executeUpdate("ALTER TABLE stock_alerts CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
 
-            System.out.println("=== تم إنشاء وفحص وتحديث ترميز جميع جداول قاعدة البيانات للغة العربية بنجاح ===");
+            System.out.println("=== تم إنشاء وفحص وتحديث ترميز جميع جداول قاعدة البيانات للغة العربية (مُعطّل - M2) ===");
         } catch (SQLException e) {
-            System.err.println("خطأ أثناء تهيئة جداول قاعدة البيانات: " + e.getMessage());
+            System.err.println("خطأ أثناء تهيئة جداول قاعدة البيانات (مُعطّل - M2): " + e.getMessage());
+        }
         }
     }
 
@@ -468,7 +487,7 @@ public class DatabaseManager {
 
         // فحص ما إذا كانت الفاتورة مسجلة مسبقاً لمنع التكرار
         String checkSql = "SELECT COUNT(*) FROM sales_invoices WHERE invoice_code = ?";
-        String insertSql = "INSERT INTO sales_invoices (invoice_code, customer_account, sales_account, cogs_account, finished_goods_account, total_sales, total_cogs) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String insertSql = "INSERT INTO sales_invoices (invoice_code, invoice_date, customer_account, sales_revenue_account, finished_goods_account, cogs_account, subtotal_amount, tax_amount, total_invoice_amount, inventory_cost_amount) VALUES (?, CURRENT_DATE, ?, ?, ?, ?, ?, 0, ?, ?)";
         
         try (Connection conn = getConnection();
              PreparedStatement checkStmt = conn.prepareStatement(checkSql)) {
@@ -487,7 +506,8 @@ public class DatabaseManager {
                 pstmt.setString(4, cogsAcc);
                 pstmt.setString(5, finishedGoodsAcc);
                 pstmt.setDouble(6, totalSales);
-                pstmt.setDouble(7, totalCogs);
+                pstmt.setDouble(7, totalSales);
+                pstmt.setDouble(8, totalCogs);
                 pstmt.executeUpdate();
                 System.out.println("=== [SQL Success] تم حفظ فاتورة المبيعات وتكلفة البضاعة المباعة بنجاح ===");
             }
@@ -659,7 +679,7 @@ public class DatabaseManager {
     // 14. تقارير الاستعلام: دالة قراءة وطباعة تقرير فواتير المبيعات وتكلفة المبيعات
     // =========================================================================
     public static void printSalesReport() {
-        String sql = "SELECT invoice_code, customer_account, sales_account, cogs_account, finished_goods_account, total_sales, total_cogs FROM sales_invoices";
+        String sql = "SELECT invoice_code, customer_account, total_invoice_amount, inventory_cost_amount FROM sales_invoices";
         System.out.println("\n========= تقرير فواتير المبيعات وتكلفة المبيعات (SQL) =========");
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement();
@@ -668,8 +688,8 @@ public class DatabaseManager {
             while (rs.next()) {
                 String code = rs.getString("invoice_code");
                 String cust = rs.getString("customer_account");
-                double sales = rs.getDouble("total_sales");
-                double cogs = rs.getDouble("total_cogs");
+                double sales = rs.getDouble("total_invoice_amount");
+                double cogs = rs.getDouble("inventory_cost_amount");
 
                 System.out.println("رقم الفاتورة: " + code + " | العميل: " + cust + 
                                    " | إجمالي المبيعات: " + sales + " | التكلفة (COGS): " + cogs);
@@ -696,6 +716,17 @@ public class DatabaseManager {
     // تهيئة جداول الموردين والعملاء والمفوضين والمرفقات
     // =========================================================================
     public static void initializeParties() {
+        // (M2) لا DDL هنا بعد الآن؛ الجداول business_parties/party_delegates/document_attachments
+        // تُدار من schema.sql. هذا فقط فحص اتصال.
+        try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
+            stmt.executeQuery("SELECT 1");
+            System.out.println("=== تم التأكد من الاتصال لجداول الموردين والعملاء (بدون DDL) ===");
+        } catch (SQLException e) {
+            System.err.println("فشل فحص اتصال تهيئة الموردين والعملاء: " + e.getMessage());
+            JOptionPane.showMessageDialog(null, "فشل الاتصال بقاعدة البيانات: " + e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        if (false) {
         try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS business_parties ("
                     + "code VARCHAR(20) PRIMARY KEY, ar_name VARCHAR(255) NOT NULL, "
@@ -736,7 +767,8 @@ public class DatabaseManager {
             stmt.executeUpdate("ALTER TABLE business_parties ADD COLUMN IF NOT EXISTS contact_person VARCHAR(255) AFTER address");
         } catch (SQLException e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(null, "فشل تهيئة جداول الموردين والعملاء: " + e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(null, "فشل تهيئة جداول الموردين والعملاء (مُعطّل - M2): " + e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
+        }
         }
     }
 

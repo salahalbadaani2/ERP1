@@ -1,7 +1,13 @@
 -- ============================================================================
 -- نظام ERP المصنعي المتكامل - سكربت قاعدة البيانات الشامل (schema.sql)
--- متوافق مع: MySQL 5.7+ / MySQL 8.0+ / MariaDB / phpMyAdmin / MySQL Workbench
+-- متوافق مع: MySQL 5.7+ / MySQL 8.0+ / MariaDB (XAMPP 10.4.32)
 -- الترميز المعتمد: UTF-8 Unicode (utf8mb4_unicode_ci)
+--
+-- ملاحظة الأمان (M3 - خطة توحيد قاعدة البيانات):
+--   * هذا الملف = المرجع الوثائقي الوحيد للبنية، ويمكن إعادة تشغيله بأمان
+--     عدة مرات (كل CREATE غالباً IF NOT EXISTS) ولا يحتوي أي DROP TABLE.
+--   * لا يحذف أي بيانات عند إعادة التشغيل.
+--   * البنية القائمة في قاعدة الإنتاج (erp_factory_db) هي مصدر الحقيقة.
 -- ============================================================================
 
 -- 1. إنشاء قاعدة البيانات وضبط الترميز المعتمد
@@ -17,8 +23,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ----------------------------------------------------------------------------
 -- 2. جدول دليل وشجرة الحسابات (chart_of_accounts)
 -- ----------------------------------------------------------------------------
-DROP TABLE IF EXISTS `chart_of_accounts`;
-CREATE TABLE `chart_of_accounts` (
+CREATE TABLE IF NOT EXISTS `chart_of_accounts` (
   `account_code` VARCHAR(20) NOT NULL COMMENT 'رقم الحساب (مثال: 123020001)',
   `account_name` VARCHAR(255) NOT NULL COMMENT 'اسم الحساب المحاسبي بالعربي',
   `account_type` ENUM('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE') NOT NULL COMMENT 'النوع الرئيسي',
@@ -37,8 +42,7 @@ CREATE TABLE `chart_of_accounts` (
 -- ----------------------------------------------------------------------------
 -- 3. جدول بطاقة الأصناف والمخزون التام والمواد الخام (inventory_items)
 -- ----------------------------------------------------------------------------
-DROP TABLE IF EXISTS `inventory_items`;
-CREATE TABLE `inventory_items` (
+CREATE TABLE IF NOT EXISTS `inventory_items` (
   `item_code` VARCHAR(50) NOT NULL COMMENT 'كود الصنف الفريد',
   `item_name` VARCHAR(255) NOT NULL COMMENT 'اسم الصنف التجاري/المصنعي',
   `category` VARCHAR(100) DEFAULT 'منتجات تامة' COMMENT 'تصنيف الصنف',
@@ -61,9 +65,9 @@ CREATE TABLE `inventory_items` (
 
 -- ----------------------------------------------------------------------------
 -- 4. جدول فواتير المبيعات الصادرة (sales_invoices)
+-- المفتاح الأساسي الحقيقي: invoice_code
 -- ----------------------------------------------------------------------------
-DROP TABLE IF EXISTS `sales_invoices`;
-CREATE TABLE `sales_invoices` (
+CREATE TABLE IF NOT EXISTS `sales_invoices` (
   `invoice_code` VARCHAR(50) NOT NULL COMMENT 'رقم فاتورة المبيعات (مثال: INV-1001)',
   `invoice_date` DATE NOT NULL COMMENT 'تاريخ الفاتورة',
   `customer_account` VARCHAR(20) NOT NULL COMMENT 'حساب العميل (123020001)',
@@ -87,30 +91,26 @@ CREATE TABLE `sales_invoices` (
 -- ----------------------------------------------------------------------------
 -- 5. جدول حركات المخزون (inventory_movements)
 -- ----------------------------------------------------------------------------
-DROP TABLE IF EXISTS `inventory_movements`;
-CREATE TABLE `inventory_movements` (
+CREATE TABLE IF NOT EXISTS `inventory_movements` (
   `movement_id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'معرف الحركة المخزنية',
-  `document_number` VARCHAR(50) NOT NULL COMMENT 'رقم المستند/الفاتورة',
-  `movement_type` VARCHAR(20) NOT NULL COMMENT 'نوع الحركة (RECEIPT/ISSUE)',
-  `item_code` VARCHAR(50) NOT NULL COMMENT 'كود الصنف',
-  `item_name` VARCHAR(255) NOT NULL COMMENT 'اسم الصنف',
+  `document_number` VARCHAR(50) DEFAULT NULL COMMENT 'رقم المستند/الفاتورة',
+  `movement_type` VARCHAR(20) DEFAULT NULL COMMENT 'نوع الحركة (RECEIPT/ISSUE)',
+  `item_code` VARCHAR(50) DEFAULT NULL COMMENT 'كود الصنف',
+  `item_name` VARCHAR(255) DEFAULT NULL COMMENT 'اسم الصنف',
   `quantity` DECIMAL(12, 3) NOT NULL COMMENT 'الكمية',
-  `unit_cost` DECIMAL(15,2) NOT NULL COMMENT 'تكلفة الوحدة',
-  `inventory_account` VARCHAR(20) NOT NULL COMMENT 'حساب المخزون',
-  `counter_account` VARCHAR(20) NOT NULL COMMENT 'الحساب المقابل',
+  `unit_cost` DECIMAL(15,2) DEFAULT NULL COMMENT 'تكلفة الوحدة',
+  `inventory_account` VARCHAR(20) DEFAULT NULL COMMENT 'حساب المخزون',
+  `counter_account` VARCHAR(20) DEFAULT NULL COMMENT 'الحساب المقابل',
   `receiver` VARCHAR(255) DEFAULT NULL COMMENT 'المستلم',
   `deliverer` VARCHAR(255) DEFAULT NULL COMMENT 'المورد',
   `narration` TEXT DEFAULT NULL COMMENT 'البيان والشرح',
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT 'تاريخ الإنشاء',
-  INDEX `idx_doc_number` (`document_number`),
-  INDEX `idx_item_code` (`item_code`)
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT 'تاريخ الإنشاء'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='جدول حركات المخزون';
 
 -- ----------------------------------------------------------------------------
--- 5. جدول فواتير وأذون مردودات المبيعات (sales_return_invoices)
+-- 5أ. جدول فواتير وأذون مردودات المبيعات (sales_return_invoices)
 -- ----------------------------------------------------------------------------
-DROP TABLE IF EXISTS `sales_return_invoices`;
-CREATE TABLE `sales_return_invoices` (
+CREATE TABLE IF NOT EXISTS `sales_return_invoices` (
   `return_code` VARCHAR(50) NOT NULL COMMENT 'رقم فاتورة المرتجع (مثال: SRI-1001)',
   `original_invoice_code` VARCHAR(50) DEFAULT 'مباشر بدون فاتورة' COMMENT 'رقم الفاتورة الأصلية',
   `return_date` DATE NOT NULL COMMENT 'تاريخ المرتجع',
@@ -136,8 +136,7 @@ CREATE TABLE `sales_return_invoices` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='فواتير وأذون مردودات ومسموحات المبيعات';
 
 -- جدول التوافق لدوال DatabaseManager.insertSalesReturnNote
-DROP TABLE IF EXISTS `sales_return_notes`;
-CREATE TABLE `sales_return_notes` (
+CREATE TABLE IF NOT EXISTS `sales_return_notes` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `return_code` VARCHAR(50) NOT NULL UNIQUE,
   `customer_account` VARCHAR(20) NOT NULL,
@@ -149,10 +148,9 @@ CREATE TABLE `sales_return_notes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
--- 5أ. جدول تفاصيل فواتير المبيعات (sales_invoice_details)
+-- 5ب. جدول تفاصيل فواتير المبيعات (sales_invoice_details)
 -- ----------------------------------------------------------------------------
-DROP TABLE IF EXISTS `sales_invoice_details`;
-CREATE TABLE `sales_invoice_details` (
+CREATE TABLE IF NOT EXISTS `sales_invoice_details` (
   `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
   `invoice_code` VARCHAR(50) NOT NULL,
   `item_code` VARCHAR(50) NOT NULL,
@@ -165,10 +163,9 @@ CREATE TABLE `sales_invoice_details` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='تفاصيل فواتير المبيعات';
 
 -- ----------------------------------------------------------------------------
--- 5ب. جدول تفاصيل فواتير المشتريات (purchase_invoice_details)
+-- 5ج. جدول تفاصيل فواتير المشتريات (purchase_invoice_details)
 -- ----------------------------------------------------------------------------
-DROP TABLE IF EXISTS `purchase_invoice_details`;
-CREATE TABLE `purchase_invoice_details` (
+CREATE TABLE IF NOT EXISTS `purchase_invoice_details` (
   `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
   `invoice_code` VARCHAR(50) NOT NULL,
   `item_code` VARCHAR(50) NOT NULL,
@@ -181,10 +178,9 @@ CREATE TABLE `purchase_invoice_details` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='تفاصيل فواتير المشتريات';
 
 -- ----------------------------------------------------------------------------
--- 5ج. جدول تفاصيل الإنتاج (production_details)
+-- 5د. جدول تفاصيل الإنتاج (production_details)
 -- ----------------------------------------------------------------------------
-DROP TABLE IF EXISTS `production_details`;
-CREATE TABLE `production_details` (
+CREATE TABLE IF NOT EXISTS `production_details` (
   `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
   `production_order` VARCHAR(50) NOT NULL,
   `item_code` VARCHAR(50) NOT NULL,
@@ -196,7 +192,10 @@ CREATE TABLE `production_details` (
   INDEX `idx_pd_order` (`production_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='تفاصيل أوامر الإنتاج';
 
-CREATE TABLE `purchase_invoices` (
+-- ----------------------------------------------------------------------------
+-- 5هـ. جدول فواتير المشتريات (purchase_invoices)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `purchase_invoices` (
   `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
   `invoice_code` VARCHAR(50) NOT NULL UNIQUE,
   `inventory_account` VARCHAR(20) NOT NULL,
@@ -208,7 +207,10 @@ CREATE TABLE `purchase_invoices` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `purchase_return_invoices` (
+-- ----------------------------------------------------------------------------
+-- 5و. جدول فواتير مرتجعات المشتريات (purchase_return_invoices)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `purchase_return_invoices` (
   `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
   `return_code` VARCHAR(50) NOT NULL UNIQUE,
   `inventory_account` VARCHAR(20) NOT NULL,
@@ -223,10 +225,7 @@ CREATE TABLE `purchase_return_invoices` (
 -- ----------------------------------------------------------------------------
 -- 6. جدول قيود اليومية العامة المزدوجة (journal_entries & lines)
 -- ----------------------------------------------------------------------------
-DROP TABLE IF EXISTS `journal_entry_lines`;
-DROP TABLE IF EXISTS `journal_entries`;
-
-CREATE TABLE `journal_entries` (
+CREATE TABLE IF NOT EXISTS `journal_entries` (
   `entry_id` BIGINT AUTO_INCREMENT PRIMARY KEY,
   `entry_number` VARCHAR(50) NOT NULL UNIQUE COMMENT 'رقم القيد اليومي (مثال: JV-2026-001)',
   `entry_date` DATE NOT NULL COMMENT 'تاريخ القيد',
@@ -242,7 +241,7 @@ CREATE TABLE `journal_entries` (
   INDEX `idx_ref_doc` (`reference_doc`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='رأس سند قيد اليومية العامة';
 
-CREATE TABLE `journal_entry_lines` (
+CREATE TABLE IF NOT EXISTS `journal_entry_lines` (
   `line_id` BIGINT AUTO_INCREMENT PRIMARY KEY,
   `entry_id` BIGINT NOT NULL,
   `account_code` VARCHAR(20) NOT NULL COMMENT 'الحساب الفرعي',
@@ -254,7 +253,200 @@ CREATE TABLE `journal_entry_lines` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='تفاصيل وسطور قيود اليومية';
 
 -- ----------------------------------------------------------------------------
--- 7. تفعيل فحص المفاتيح الأجنبية وتعبئة البيانات الأساسية لشجرة الحسابات (Seed Data)
+-- 7. الجداول التشغيلية (أذون المخازن والإنتاج والخزينة والتنبيهات)
+-- بنيتها من القاعدة الحية erp_factory_db (مصدر الحقيقة)
+-- ----------------------------------------------------------------------------
+
+-- 7.1 سندات استلام المواد الخام (GRN)
+CREATE TABLE IF NOT EXISTS `goods_receipt_notes` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `grn_code` VARCHAR(50) DEFAULT NULL,
+  `supplier_account` VARCHAR(20) DEFAULT NULL,
+  `raw_material_account` VARCHAR(20) DEFAULT NULL,
+  `total_amount` DOUBLE DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `is_posted` TINYINT(1) NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7.2 سندات صرف المواد للإنتاج (Material Issue)
+CREATE TABLE IF NOT EXISTS `material_issue_notes` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `issue_code` VARCHAR(50) DEFAULT NULL,
+  `wip_account` VARCHAR(20) DEFAULT NULL,
+  `raw_material_account` VARCHAR(20) DEFAULT NULL,
+  `total_amount` DOUBLE DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `is_posted` TINYINT(1) NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7.3 سندات استلام المنتج التام (Finished Goods Receipt)
+CREATE TABLE IF NOT EXISTS `finished_goods_notes` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `note_code` VARCHAR(50) DEFAULT NULL,
+  `finished_goods_account` VARCHAR(20) DEFAULT NULL,
+  `wip_account` VARCHAR(20) DEFAULT NULL,
+  `total_amount` DOUBLE DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `is_posted` TINYINT(1) NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7.4 تحويلات سيارات التوزيع (Van Transfer)
+CREATE TABLE IF NOT EXISTS `van_transfer_notes` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `transfer_code` VARCHAR(50) DEFAULT NULL,
+  `van_account` VARCHAR(20) DEFAULT NULL,
+  `finished_goods_account` VARCHAR(20) DEFAULT NULL,
+  `total_amount` DOUBLE DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `quantity` DOUBLE DEFAULT NULL,
+  `unit_cost` DOUBLE DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7.5 مرتجعات سيارات التوزيع (Van Return)
+CREATE TABLE IF NOT EXISTS `van_return_notes` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `return_code` VARCHAR(50) DEFAULT NULL,
+  `finished_goods_account` VARCHAR(20) DEFAULT NULL,
+  `van_account` VARCHAR(20) DEFAULT NULL,
+  `total_amount` DOUBLE DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `quantity` DOUBLE DEFAULT NULL,
+  `unit_cost` DOUBLE DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7.6 مرتجعات المشتريات (Purchase Return Notes)
+CREATE TABLE IF NOT EXISTS `purchase_return_notes` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `return_code` VARCHAR(50) DEFAULT NULL,
+  `supplier_account` VARCHAR(20) DEFAULT NULL,
+  `raw_material_account` VARCHAR(20) DEFAULT NULL,
+  `total_amount` DOUBLE DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7.7 إقفال المصاريف غير المباشرة (Overhead Closing)
+CREATE TABLE IF NOT EXISTS `overhead_closings` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `closing_code` VARCHAR(50) DEFAULT NULL,
+  `actual_account` VARCHAR(20) DEFAULT NULL,
+  `applied_account` VARCHAR(20) DEFAULT NULL,
+  `cogs_account` VARCHAR(20) DEFAULT NULL,
+  `actual_amount` DOUBLE DEFAULT NULL,
+  `applied_amount` DOUBLE DEFAULT NULL,
+  `month_year` VARCHAR(20) DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `is_posted` TINYINT(1) NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7.8 سندات الخزينة والبنك (Treasury Vouchers)
+CREATE TABLE IF NOT EXISTS `treasury_vouchers` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `voucher_code` VARCHAR(50) DEFAULT NULL,
+  `account_code` VARCHAR(20) DEFAULT NULL,
+  `amount` DOUBLE DEFAULT NULL,
+  `voucher_type` VARCHAR(20) DEFAULT NULL,
+  `description` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `voucher_number` VARCHAR(50) DEFAULT NULL,
+  `voucher_date` DATE DEFAULT NULL,
+  `reference_name` VARCHAR(255) DEFAULT NULL,
+  `narration` TEXT DEFAULT NULL,
+  UNIQUE KEY `uq_voucher_code` (`voucher_code`),
+  UNIQUE KEY `uq_voucher_number` (`voucher_number`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7.9 التنبيهات المخزنية (Stock Alerts)
+CREATE TABLE IF NOT EXISTS `stock_alerts` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `item_code` VARCHAR(50) DEFAULT NULL,
+  `item_name` VARCHAR(100) DEFAULT NULL,
+  `current_stock` DOUBLE DEFAULT NULL,
+  `min_stock` DOUBLE DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uq_item_code` (`item_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- 8. جداول الموردين والعملاء والمفوضين والمرفقات
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `business_parties` (
+  `code` VARCHAR(20) PRIMARY KEY,
+  `ar_name` VARCHAR(255) NOT NULL,
+  `en_name` VARCHAR(255) DEFAULT NULL,
+  `party_type` ENUM('supplier','customer') NOT NULL,
+  `status` ENUM('active','suspended') NOT NULL DEFAULT 'active',
+  `owner_name` VARCHAR(255) DEFAULT NULL,
+  `parent_account_code` VARCHAR(20) DEFAULT NULL,
+  `sub_account_code` VARCHAR(20) DEFAULT NULL,
+  `credit_limit` DECIMAL(18,2) DEFAULT 0,
+  `credit_period_days` INT DEFAULT 0,
+  `currency_code` VARCHAR(10) DEFAULT 'YER',
+  `opening_balance` DECIMAL(18,4) DEFAULT 0,
+  `balance_type` ENUM('debit','credit') DEFAULT 'debit',
+  `vat_number` VARCHAR(20) UNIQUE,
+  `cr_number` VARCHAR(50) UNIQUE,
+  `cr_image_path` VARCHAR(500),
+  `phone` VARCHAR(20),
+  `mobile` VARCHAR(20),
+  `email` VARCHAR(100),
+  `address` TEXT,
+  `contact_person` VARCHAR(255),
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `party_delegates` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `party_code` VARCHAR(20) NOT NULL,
+  `delegate_name` VARCHAR(255) NOT NULL,
+  `job_title` VARCHAR(255),
+  `authorization_doc_path` VARCHAR(500),
+  FOREIGN KEY (`party_code`) REFERENCES `business_parties` (`code`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `document_attachments` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `party_code` VARCHAR(20) NOT NULL,
+  `doc_type` VARCHAR(50),
+  `file_path` VARCHAR(500),
+  `description` TEXT,
+  `uploaded_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`party_code`) REFERENCES `business_parties` (`code`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- 9. جداول التسلسل والرقن (Document Sequences)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `document_sequences` (
+  `document_type` VARCHAR(50) PRIMARY KEY,
+  `next_number` INT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- 10. جداول التطبيق البنكي (Bank Reconciliation)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `bank_reconciliation` (
+  `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `bank_account` VARCHAR(20),
+  `entry_id` BIGINT,
+  `journal_entry_number` VARCHAR(50),
+  `reconciled` BOOLEAN DEFAULT FALSE,
+  `reconciled_date` DATE,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uq_bank_entry` (`bank_account`, `journal_entry_number`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `bank_reconciliation_memos` (
+  `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `bank_account` VARCHAR(20),
+  `as_of_date` DATE,
+  `book_balance` DOUBLE,
+  `bank_balance` DOUBLE,
+  `diff` DOUBLE,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
+-- 11. تفعيل فحص المفاتيح الأجنبية وتعبئة البيانات الأساسية لشجرة الحسابات (Seed Data)
 -- ----------------------------------------------------------------------------
 SET FOREIGN_KEY_CHECKS = 1;
 
