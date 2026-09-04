@@ -28,6 +28,10 @@ public class DatabaseManager {
         return DriverManager.getConnection(URL, USER, PASSWORD);
     }
 
+    private static String emptyToNull(String value) {
+        return value == null || value.trim().isEmpty() ? null : value.trim();
+    }
+
     private static void addUniqueIndexIfMissing(Connection connection, Statement statement,
                                                 String tableName, String indexName, String columnName)
             throws SQLException {
@@ -807,7 +811,8 @@ public class DatabaseManager {
                 ps.setString(6, parentAccountCode); ps.setString(7, subAccountCode);
                 ps.setDouble(8, creditLimit); ps.setInt(9, creditPeriodDays); ps.setString(10, currencyCode);
                 ps.setDouble(11, openingBalance); ps.setString(12, balanceType);
-                ps.setString(13, vatNumber); ps.setString(14, crNumber); ps.setString(15, crImagePath);
+                ps.setString(13, emptyToNull(vatNumber)); ps.setString(14, emptyToNull(crNumber));
+                ps.setString(15, emptyToNull(crImagePath));
                 ps.setString(16, phone); ps.setString(17, mobile); ps.setString(18, email);
                 ps.setString(19, address); ps.setString(20, contactPerson);
                 ps.executeUpdate();
@@ -817,11 +822,19 @@ public class DatabaseManager {
                     + "VALUES (?, ?, ?, ?, 6, 1, ?, ?)";
             String accountType = "supplier".equals(partyType) ? "LIABILITY" : "ASSET";
             String accountName = arName + " (" + partyType + ")";
-            try (PreparedStatement ps = conn.prepareStatement(sqlInsertAccount)) {
-                ps.setString(1, subAccountCode); ps.setString(2, accountName);
-                ps.setString(3, accountType); ps.setString(4, parentAccountCode);
-                ps.setDouble(5, openingBalance); ps.setString(6, currencyCode);
-                ps.executeUpdate();
+            String accountExistsSql = "SELECT 1 FROM chart_of_accounts WHERE account_code = ?";
+            try (PreparedStatement exists = conn.prepareStatement(accountExistsSql)) {
+                exists.setString(1, subAccountCode);
+                try (ResultSet rs = exists.executeQuery()) {
+                    if (!rs.next()) {
+                        try (PreparedStatement ps = conn.prepareStatement(sqlInsertAccount)) {
+                            ps.setString(1, subAccountCode); ps.setString(2, accountName);
+                            ps.setString(3, accountType); ps.setString(4, parentAccountCode);
+                            ps.setDouble(5, openingBalance); ps.setString(6, currencyCode);
+                            ps.executeUpdate();
+                        }
+                    }
+                }
             }
 
             if (delegates != null) {
@@ -911,7 +924,8 @@ public class DatabaseManager {
                 ps.setString(4, parentAccountCode); ps.setString(5, subAccountCode);
                 ps.setDouble(6, creditLimit); ps.setInt(7, creditPeriodDays); ps.setString(8, currencyCode);
                 ps.setDouble(9, openingBalance); ps.setString(10, balanceType);
-                ps.setString(11, vatNumber); ps.setString(12, crNumber); ps.setString(13, crImagePath);
+                ps.setString(11, emptyToNull(vatNumber)); ps.setString(12, emptyToNull(crNumber));
+                ps.setString(13, emptyToNull(crImagePath));
                 ps.setString(14, phone); ps.setString(15, mobile); ps.setString(16, email);
                 ps.setString(17, address); ps.setString(18, contactPerson);
                 ps.setString(19, code);

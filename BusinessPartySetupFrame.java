@@ -19,6 +19,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 
@@ -216,6 +217,8 @@ public class BusinessPartySetupFrame extends JFrame {
     // =========================================================================
     private JPanel createSinglePagePanel() {
         JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setPreferredSize(new Dimension(1200, 760));
+        panel.setMinimumSize(new Dimension(0, 0));
         panel.setBackground(SCREEN_BACKGROUND);
         panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
 
@@ -248,6 +251,19 @@ public class BusinessPartySetupFrame extends JFrame {
         btnDirectory.addActionListener(e -> openAccountTree());
         namePanel.add(btnDirectory, BorderLayout.EAST);
         addLabelField(form, gc, row++, "الاسم التجاري *:", namePanel);
+
+        JPanel accountCodePanel = new JPanel(new BorderLayout(8, 0));
+        accountCodePanel.setOpaque(false);
+        accountCodePanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        txtSubAccount = new JTextField(18);
+        txtSubAccount.setEditable(false);
+        styleField(txtSubAccount);
+        accountCodePanel.add(txtSubAccount, BorderLayout.CENTER);
+        JButton btnClearAccount = new JButton("إفراغ الحساب");
+        styleToolbarButton(btnClearAccount, SECONDARY_COLOR, new Color(15, 23, 42));
+        btnClearAccount.addActionListener(e -> clearAccountSelection());
+        accountCodePanel.add(btnClearAccount, BorderLayout.EAST);
+        addLabelField(form, gc, row++, "رقم الحساب:", accountCodePanel);
 
         addLabelField(form, gc, row++, "اسم المالك:", txtOwnerName = new JTextField(20));
         addLabelField(form, gc, row++, "المدينة:", txtCity = new JTextField(20));
@@ -333,6 +349,16 @@ public class BusinessPartySetupFrame extends JFrame {
         getAccountEditor().setText(name == null ? "" : name);
     }
 
+    private void clearAccountSelection() {
+        updatingAccountCombo = true;
+        cmbAccountName.removeAllItems();
+        cmbAccountName.addItem("... اختر أو اكتب للبحث في الشجرة");
+        cmbAccountName.setSelectedIndex(0);
+        setCommercialName("");
+        txtSubAccount.setText("");
+        updatingAccountCombo = false;
+    }
+
     private void setAccountSelection(String code, String name) {
         String display = code + " - " + name;
         boolean found = false;
@@ -355,6 +381,7 @@ public class BusinessPartySetupFrame extends JFrame {
         if (!value.contains(" - ")) return;
         String[] parts = value.split(" - ", 2);
         setAccountSelection(parts[0].trim(), parts[1].trim());
+        loadPartyByAccountCode(parts[0].trim());
     }
 
     private void openAccountTree() {
@@ -386,6 +413,7 @@ public class BusinessPartySetupFrame extends JFrame {
 
     private JPanel createImagePanel(String label, boolean authorization) {
         JPanel panel = new JPanel(new BorderLayout(8, 4));
+        panel.setPreferredSize(new Dimension(0, 100));
         panel.setOpaque(false);
         panel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         panel.setBorder(BorderFactory.createCompoundBorder(
@@ -606,14 +634,37 @@ public class BusinessPartySetupFrame extends JFrame {
                 if (rs.next()) {
                     txtCode.setText(rs.getString("code"));
                     setCommercialName(rs.getString("ar_name"));
+                    txtEnName.setText(rs.getString("en_name") != null ? rs.getString("en_name") : "");
+                    partyType = rs.getString("party_type");
+                    if (cmbPartyType != null) cmbPartyType.setSelectedItem(partyType);
                     txtOwnerName.setText(rs.getString("owner_name") != null ? rs.getString("owner_name") : "");
+                    txtParentAccount.setText(rs.getString("parent_account_code") != null ? rs.getString("parent_account_code") : "");
                     txtSubAccount.setText(rs.getString("sub_account_code") != null ? rs.getString("sub_account_code") : "");
+                    txtOpeningBalance.setText(rs.getDouble("opening_balance") != 0
+                            ? String.valueOf(rs.getDouble("opening_balance")) : "");
+                    txtCreditLimit.setText(rs.getDouble("credit_limit") != 0
+                            ? String.valueOf(rs.getDouble("credit_limit")) : "");
+                    txtCreditPeriod.setText(rs.getInt("credit_period_days") != 0
+                            ? String.valueOf(rs.getInt("credit_period_days")) : "");
+                    txtVatNumber.setText(rs.getString("vat_number") != null ? rs.getString("vat_number") : "");
                     txtPhone.setText(rs.getString("phone") != null ? rs.getString("phone") : "");
+                    txtMobile.setText(rs.getString("mobile") != null ? rs.getString("mobile") : "");
                     txtEmail.setText(rs.getString("email") != null ? rs.getString("email") : "");
                     String storedAddress = rs.getString("address") != null ? rs.getString("address") : "";
                     applyAddressValue(storedAddress);
                     txtCrNumber.setText(rs.getString("cr_number") != null ? rs.getString("cr_number") : "");
                     txtCrImagePath.setText(rs.getString("cr_image_path") != null ? rs.getString("cr_image_path") : "");
+                    txtContactPerson.setText(rs.getString("contact_person") != null
+                            ? rs.getString("contact_person") : "");
+                    if (cmbStatus != null && rs.getString("status") != null) {
+                        cmbStatus.setSelectedItem(rs.getString("status"));
+                    }
+                    if (cmbBalanceType != null && rs.getString("balance_type") != null) {
+                        cmbBalanceType.setSelectedItem(rs.getString("balance_type"));
+                    }
+                    if (cmbCurrency != null && rs.getString("currency_code") != null) {
+                        cmbCurrency.setSelectedItem(rs.getString("currency_code"));
+                    }
                     txtDelegateName.setText("");
                     txtDelegateJob.setText("");
                     txtDelegateDocPath.setText("");
@@ -622,8 +673,26 @@ public class BusinessPartySetupFrame extends JFrame {
                     loadDelegates(code);
                 }
             }
+
         } catch (SQLException e) {
             e.printStackTrace();
+        }
+    }
+
+    private void loadPartyByAccountCode(String accountCode) {
+        if (accountCode == null || accountCode.trim().isEmpty()) return;
+        String sql = "SELECT code FROM business_parties WHERE sub_account_code = ? LIMIT 1";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, accountCode.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    loadPartyByCode(rs.getString("code"));
+                }
+            }
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "فشل جلب بيانات الجهة المرتبطة بالحساب: "
+                            + ex.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -775,7 +844,7 @@ public class BusinessPartySetupFrame extends JFrame {
                         String max = rs.getString(1);
                         String num = max.substring(prefix.length());
                         int next = Integer.parseInt(num.isEmpty() ? "0" : num) + 1;
-                        txtCode.setText(prefix + String.format("%04d", next));
+                        txtCode.setText(prefix + String.format(Locale.ENGLISH, "%04d", next));
                     } else {
                         txtCode.setText(prefix + "0001");
                     }
@@ -874,8 +943,10 @@ public class BusinessPartySetupFrame extends JFrame {
         if (term.isEmpty()) return false;
 
         StringBuilder names = new StringBuilder();
+        String selectedAccountCode = txtSubAccount.getText().trim();
         String accountSql = "SELECT account_code, account_name FROM chart_of_accounts "
-                + "WHERE is_sub_account = 1 AND account_name LIKE ? ORDER BY account_name LIMIT 10";
+                + "WHERE is_sub_account = 1 AND account_name LIKE ? "
+                + "AND account_code <> ? ORDER BY account_name LIMIT 10";
         String partySql = "SELECT code, ar_name FROM business_parties WHERE ar_name LIKE ? "
                 + (isEditMode ? "AND code <> ? " : "") + "ORDER BY ar_name LIMIT 10";
         try (Connection conn = DatabaseManager.getConnection();
@@ -883,9 +954,14 @@ public class BusinessPartySetupFrame extends JFrame {
              PreparedStatement party = conn.prepareStatement(partySql)) {
             String pattern = "%" + term + "%";
             account.setString(1, pattern);
+            account.setString(2, selectedAccountCode);
             try (ResultSet rs = account.executeQuery()) {
                 while (rs.next()) {
-                    names.append("حساب: ").append(rs.getString("account_code"))
+                    String accountCode = rs.getString("account_code");
+                    if (accountCode.equals(selectedAccountCode)) {
+                        continue;
+                    }
+                    names.append("حساب: ").append(accountCode)
                             .append(" - ").append(rs.getString("account_name")).append("\n");
                 }
             }
@@ -1029,8 +1105,18 @@ public class BusinessPartySetupFrame extends JFrame {
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, code);
             try (ResultSet rs = ps.executeQuery()) {
+                boolean firstDelegate = true;
                 while (rs.next()) {
-                    delegateModel.addRow(new Object[]{rs.getString("delegate_name"), rs.getString("job_title"), rs.getString("authorization_doc_path")});
+                    String delegateName = rs.getString("delegate_name");
+                    String jobTitle = rs.getString("job_title");
+                    String documentPath = rs.getString("authorization_doc_path");
+                    delegateModel.addRow(new Object[]{delegateName, jobTitle, documentPath});
+                    if (firstDelegate) {
+                        txtDelegateName.setText(delegateName != null ? delegateName : "");
+                        txtDelegateJob.setText(jobTitle != null ? jobTitle : "");
+                        txtDelegateDocPath.setText(documentPath != null ? documentPath : "");
+                        firstDelegate = false;
+                    }
                 }
             }
         } catch (SQLException e) { e.printStackTrace(); }
