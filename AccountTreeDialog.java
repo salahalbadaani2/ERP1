@@ -72,6 +72,7 @@ public class AccountTreeDialog extends JFrame {
     private JLabel lblValidationStatus;
 
     private JButton btnCancel;
+    private JButton btnSelect;
 
     private List<AccountNodeData> accountList;
     private AccountNodeData selectedAccount;
@@ -219,10 +220,14 @@ public class AccountTreeDialog extends JFrame {
         ));
         getContentPane().add(scrollTree, BorderLayout.CENTER);
 
-        // الشريط السفلي يقتصر على الإغلاق
+        // شريط الاختيار والإغلاق
         JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
         bottomBar.setBackground(new Color(248, 250, 252));
         bottomBar.setBorder(new EmptyBorder(4, 15, 6, 15));
+
+        btnSelect = new JButton("اختيار الحساب");
+        btnSelect.setFont(new Font("Tahoma", Font.BOLD, 13));
+        bottomBar.add(btnSelect);
 
         btnCancel = new JButton("إغلاق");
         btnCancel.setFont(new Font("Tahoma", Font.PLAIN, 12));
@@ -323,6 +328,7 @@ public class AccountTreeDialog extends JFrame {
             confirmed = false;
             dispose();
         });
+        btnSelect.addActionListener(e -> handleSelectAccount());
 
         txtSearch.getDocument().addDocumentListener(new DocumentListener() {
             @Override
@@ -376,7 +382,8 @@ public class AccountTreeDialog extends JFrame {
             return;
         }
 
-        if (hasChildren(selectedAccount.getCode())) {
+        boolean isParentWithChildren = hasChildren(selectedAccount.getCode());
+        if (isParentWithChildren) {
             JOptionPane.showMessageDialog(this,
                     "لا يمكن الترحيل على حساب رئيسي يحتوي على حسابات متفرعة تحته.",
                     "تنبيه",

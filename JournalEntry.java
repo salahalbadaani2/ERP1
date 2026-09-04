@@ -46,8 +46,15 @@ public class JournalEntry {
     private List<JournalLine> lines;  // سطور القيد المحاسبي
 
     public JournalEntry(String entryNumber, String referenceDoc, String sourceModule, String narration) {
+        this(entryNumber, LocalDate.now().toString(), referenceDoc, sourceModule, narration);
+    }
+
+    public JournalEntry(String entryNumber, String entryDate, String referenceDoc, String sourceModule, String narration) {
         this.entryNumber = entryNumber;
-        this.entryDate = LocalDate.now().toString();
+        if (entryDate == null || entryDate.trim().isEmpty()) {
+            throw new IllegalArgumentException("تاريخ القيد مطلوب.");
+        }
+        this.entryDate = entryDate;
         this.referenceDoc = referenceDoc;
         this.sourceModule = sourceModule;
         this.narration = narration;
