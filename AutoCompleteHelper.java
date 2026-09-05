@@ -18,8 +18,12 @@ public final class AutoCompleteHelper {
     private AutoCompleteHelper() {}
 
     public static void installAccountAutoComplete(JTextField field, String accountTypeFilter) {
+        installAccountAutoComplete(field, accountTypeFilter, false);
+    }
+
+    public static void installAccountAutoComplete(JTextField field, String accountTypeFilter, boolean keepName) {
         JPopupMenu popup = new JPopupMenu();
-        Timer debounce = new Timer(150, e -> showAccountPopup(field, popup, accountTypeFilter));
+        Timer debounce = new Timer(150, e -> showAccountPopup(field, popup, accountTypeFilter, keepName));
         debounce.setRepeats(false);
         field.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { debounce.restart(); }
@@ -29,6 +33,7 @@ public final class AutoCompleteHelper {
         // النقر المزدوج يفتح الشجرة بشكل آمن مع Window
         field.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
+                if (!field.isEditable() || !field.isEnabled()) return;
                 if (e.getClickCount() == 2) {
                     String prefix = guessPrefix(accountTypeFilter);
                     Window owner = SwingUtilities.getWindowAncestor(field);
@@ -40,8 +45,9 @@ public final class AutoCompleteHelper {
         });
     }
 
-    private static void showAccountPopup(JTextField field, JPopupMenu popup, String accountTypeFilter) {
+    private static void showAccountPopup(JTextField field, JPopupMenu popup, String accountTypeFilter, boolean keepName) {
         SwingUtilities.invokeLater(() -> {
+            if (!field.isEditable() || !field.isEnabled()) { popup.setVisible(false); return; }
             String text = field.getText().trim();
             if (text.length() < 1) { popup.setVisible(false); return; }
             List<String> suggestions = fetchAccountSuggestions(text, accountTypeFilter);
@@ -49,7 +55,7 @@ public final class AutoCompleteHelper {
             popup.removeAll();
             for (String s : suggestions) {
                 JMenuItem item = new JMenuItem(s);
-                item.addActionListener(ev -> { field.setText(extractCode(s)); popup.setVisible(false); });
+                item.addActionListener(ev -> { field.setText(keepName ? s : extractCode(s)); popup.setVisible(false); });
                 popup.add(item);
             }
             popup.show(field, 0, field.getHeight());

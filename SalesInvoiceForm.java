@@ -23,6 +23,7 @@ public class SalesInvoiceForm extends JFrame {
     private final JTextField txtTaxAmount = new JTextField("0.00");
     private final JTextField txtTotalAmount = new JTextField("0.00");
     private final JTextField txtGrandTotalAmount = new JTextField("0.00");
+    private boolean updatingTotals = false;
 
     private static final String[] COLUMNS = {"م", "نوع المخزون", "اسم الصنف", "رقم الصنف", "نوع الوحدة", "الكمية", "الجرام", "سعر الوحدة", "الإجمالي"};
 
@@ -105,7 +106,16 @@ public class SalesInvoiceForm extends JFrame {
         JPanel rowPay = new JPanel(new GridLayout(1, 3, 8, 5));
         rowPay.setOpaque(false);
         rowPay.add(new JLabel("طريقة السداد:"));
-        cmbPaymentType = new JComboBox<>(new String[]{"آجل (على حساب العميل 12302)", "نقدي (الصندوق العام 11101)"});
+        cmbPaymentType = new JComboBox<>(new String[]{"آجل (على حساب العميل 12302)", "نقدي (الصندوق الرئيسي 1110101)"});
+        cmbPaymentType.addActionListener(e -> {
+            boolean cash = cmbPaymentType.getSelectedIndex() == 1;
+            txtCustomerAccount.setEditable(!cash);
+            if (cash) {
+                txtCustomerAccount.setText("1110101 - الصندوق الرئيسي");
+            } else {
+                txtCustomerAccount.setEditable(true);
+            }
+        });
         rowPay.add(cmbPaymentType);
         panel.add(rowPay);
         panel.add(Box.createRigidArea(new Dimension(0, 8)));
@@ -182,6 +192,11 @@ public class SalesInvoiceForm extends JFrame {
         tableBtnPanel.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         JButton addRowBtn = new JButton("إضافة سطر");
         JButton removeRowBtn = new JButton("حذف السطر المحدد");
+        Font tableBtnFont = new Font("Tahoma", Font.PLAIN, 13);
+        addRowBtn.setFont(tableBtnFont);
+        removeRowBtn.setFont(tableBtnFont);
+        addRowBtn.setPreferredSize(new Dimension(110, 32));
+        removeRowBtn.setPreferredSize(new Dimension(130, 32));
         addRowBtn.addActionListener(e -> { addTableRow(); renumberRows(); });
         removeRowBtn.addActionListener(e -> removeSelectedRow());
         tableBtnPanel.add(addRowBtn);
@@ -213,18 +228,30 @@ public class SalesInvoiceForm extends JFrame {
         JButton btnPostInvoice = new JButton("حفظ وترحيل");
         btnPostInvoice.setBackground(new Color(16, 185, 129));
         btnPostInvoice.setForeground(Color.WHITE);
+        btnPostInvoice.setOpaque(true);
         btnPostInvoice.setFocusPainted(false);
         btnPostInvoice.addActionListener(e -> postInvoiceToDatabase());
         JButton btnClear = new JButton("مسح");
         btnClear.addActionListener(e -> clearForm());
         JButton btnClose = new JButton("إغلاق");
         btnClose.addActionListener(e -> dispose());
+        Font actionFont = new Font("Tahoma", Font.PLAIN, 13);
+        btnCalculate.setFont(actionFont);
+        btnPreviewPrint.setFont(actionFont);
+        btnPostInvoice.setFont(new Font("Tahoma", Font.BOLD, 13));
+        btnClear.setFont(actionFont);
+        btnClose.setFont(actionFont);
+        btnCalculate.setPreferredSize(new Dimension(110, 32));
+        btnPreviewPrint.setPreferredSize(new Dimension(130, 32));
+        btnPostInvoice.setPreferredSize(new Dimension(120, 32));
+        btnClear.setPreferredSize(new Dimension(80, 32));
+        btnClose.setPreferredSize(new Dimension(80, 32));
         bar.add(btnCalculate); bar.add(btnPreviewPrint); bar.add(btnPostInvoice); bar.add(btnClear); bar.add(btnClose);
         return bar;
     }
 
     private void installAutoComplete() {
-        AutoCompleteHelper.installAccountAutoComplete(txtCustomerAccount, "ASSET");
+        AutoCompleteHelper.installAccountAutoComplete(txtCustomerAccount, "ASSET", true);
     }
 
     private void generateInvoiceNumber() { txtInvoiceNumber.setText(DocumentNumberService.next("SALES_INVOICE", "INV-")); }
@@ -233,6 +260,9 @@ public class SalesInvoiceForm extends JFrame {
         Vector<String> rowData = new Vector<>();
         rowData.add(String.valueOf(row + 1)); rowData.add(""); rowData.add(""); rowData.add(""); rowData.add("COUNT"); rowData.add(""); rowData.add(""); rowData.add(""); rowData.add("0.00");
         tableModel.addRow(rowData);
+        itemTable.setRowSelectionInterval(row, row);
+        itemTable.scrollRectToVisible(itemTable.getCellRect(row, 1, true));
+        itemTable.requestFocusInWindow();
     }
     private void removeSelectedRow() {
         int r = itemTable.getSelectedRow();
@@ -257,28 +287,34 @@ public class SalesInvoiceForm extends JFrame {
                     }
     }
     private void calculateRowTotals() {
-        double total = 0.0;
-        for (int i = 0; i < tableModel.getRowCount(); i++) {
-            try {
-                double qty = parseDoubleSafe(tableModel.getValueAt(i, 5));
-                double gram = parseDoubleSafe(tableModel.getValueAt(i, 6));
-                double price = parseDoubleSafe(tableModel.getValueAt(i, 7));
-                String unitType = (String) tableModel.getValueAt(i, 4);
-                if ("WEIGHT".equals(unitType)) qty = qty + (gram/1000.0);
-                double totalVal = qty * price;
-                tableModel.setValueAt(String.format("%,.2f", totalVal), i, 8);
-                total += totalVal;
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    JOptionPane.showMessageDialog(this, e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
-                }
+        if (updatingTotals) return;
+        updatingTotals = true;
+        try {
+            double total = 0.0;
+            for (int i = 0; i < tableModel.getRowCount(); i++) {
+                try {
+                    double qty = parseDoubleSafe(tableModel.getValueAt(i, 5));
+                    double gram = parseDoubleSafe(tableModel.getValueAt(i, 6));
+                    double price = parseDoubleSafe(tableModel.getValueAt(i, 7));
+                    String unitType = (String) tableModel.getValueAt(i, 4);
+                    if ("WEIGHT".equals(unitType)) qty = qty + (gram/1000.0);
+                    double totalVal = qty * price;
+                    tableModel.setValueAt(String.format("%,.2f", totalVal), i, 8);
+                    total += totalVal;
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        JOptionPane.showMessageDialog(this, e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
+                    }
+            }
+            txtBaseAmount.setText(String.format("%,.2f", total));
+            double taxRate = parseDoubleSafe(txtTaxRate.getText());
+            double taxAmount = chkApplyTax.isSelected() ? total * taxRate : 0.0;
+            txtTaxAmount.setText(String.format("%,.2f", taxAmount));
+            txtTotalAmount.setText(String.format("%,.2f", total));
+            txtGrandTotalAmount.setText(String.format("%,.2f", total + taxAmount));
+        } finally {
+            updatingTotals = false;
         }
-        txtBaseAmount.setText(String.format("%,.2f", total));
-        double taxRate = parseDoubleSafe(txtTaxRate.getText());
-        double taxAmount = chkApplyTax.isSelected() ? total * taxRate : 0.0;
-        txtTaxAmount.setText(String.format("%,.2f", taxAmount));
-        txtTotalAmount.setText(String.format("%,.2f", total));
-        txtGrandTotalAmount.setText(String.format("%,.2f", total + taxAmount));
     }
     private void calculateTotals() { calculateRowTotals(); }
     private double parseDoubleSafe(Object v) {
@@ -351,6 +387,8 @@ public class SalesInvoiceForm extends JFrame {
         if (dialog.isAccountSelected()) targetField.setText(dialog.getSelectedAccountCode());
     }
     private void clearForm() {
+        cmbPaymentType.setSelectedIndex(0);
+        txtCustomerAccount.setEditable(true);
         generateInvoiceNumber(); txtCustomerAccount.setText(""); txtBaseAmount.setText("0.00"); txtTotalAmount.setText("0.00"); txtGrandTotalAmount.setText("0.00"); txtTaxAmount.setText("0.00"); chkApplyTax.setSelected(false); txtTaxRate.setText("0.15"); txtTaxRate.setEnabled(false); while(tableModel.getRowCount()>0) tableModel.removeRow(0); calculateRowTotals();
     }
     public static void main(String[] args) { SwingUtilities.invokeLater(() -> { try{ UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch(Exception e){ e.printStackTrace(); JOptionPane.showMessageDialog(null, e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE); } new SalesInvoiceForm().setVisible(true); }); }
