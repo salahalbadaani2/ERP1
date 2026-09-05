@@ -1,4 +1,6 @@
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellEditor;
 import java.awt.*;
@@ -91,10 +93,7 @@ public class SalesInvoiceForm extends JFrame {
         row2.add(new JLabel("حساب العميل المدين:"), BorderLayout.EAST);
         txtCustomerAccount.setFont(new Font("Tahoma", Font.PLAIN, 12));
         JButton btnBrowseCustomer = new JButton("دليل الحسابات");
-        btnBrowseCustomer.addActionListener(e -> {
-            browseAccounts(txtCustomerAccount, "123");
-            autoFillFromCustomer();
-        });
+        btnBrowseCustomer.addActionListener(e -> browseAccounts(txtCustomerAccount, "123"));
         JPanel custInput = new JPanel(new BorderLayout(4, 0));
         custInput.setOpaque(false);
         custInput.add(txtCustomerAccount, BorderLayout.CENTER);
@@ -145,6 +144,8 @@ public class SalesInvoiceForm extends JFrame {
         };
         itemTable = new JTable(tableModel) {
             @Override public TableCellEditor getCellEditor(int row, int column) {
+                if (column == 1) return new DefaultCellEditor(new JComboBox<>(new String[]{"مخزن المنتجات التامة", "مخزن مناديب البيع", "مخزن المواد الخام", "إنتاج تحت التشغيل"}));
+                if (column == 2) return new ItemCellEditor();
                 if (column == 4) return new DefaultCellEditor(new JComboBox<>(new String[]{"COUNT", "WEIGHT"}));
                 return super.getCellEditor(row, column);
             }
@@ -153,33 +154,20 @@ public class SalesInvoiceForm extends JFrame {
         itemTable.setFont(new Font("Tahoma", Font.PLAIN, 12));
         itemTable.setRowHeight(25);
         itemTable.getModel().addTableModelListener(e -> calculateRowTotals());
-        // دعم الشجرة للأصناف عبر النقر المزدوج
+        // النقر المزدوج على اسم الصنف أو رقمه يفتح جدول الأصناف المخزني المستقل (inventory_items)
         itemTable.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent e) {
                 if (e.getClickCount() == 2) {
                     int row = itemTable.getSelectedRow();
                     int col = itemTable.getSelectedColumn();
                     if (col == 2 || col == 3) {
-                        AccountTreeDialog dlg = new AccountTreeDialog(SalesInvoiceForm.this, "121");
+                        ItemSelectionDialog dlg = new ItemSelectionDialog(SalesInvoiceForm.this);
                         dlg.setVisible(true);
-                        if (dlg.isAccountSelected()) {
-                            String code = dlg.getSelectedAccountCode();
-                            String sql = "SELECT item_code, item_name, unit_type FROM inventory_items WHERE inventory_account=? LIMIT 1";
-                            try (Connection conn = DatabaseManager.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
-                                ps.setString(1, code);
-                                try (ResultSet rs = ps.executeQuery()) {
-                                    if (rs.next()) {
-                                        tableModel.setValueAt(rs.getString("item_name"), row, 2);
-                                        tableModel.setValueAt(rs.getString("item_code"), row, 3);
-                                        tableModel.setValueAt(rs.getString("unit_type"), row, 4);
-                                    } else {
-                                        tableModel.setValueAt(code, row, 3);
-                                    }
-                                }
-                            } catch (Exception ex) {
-                                ex.printStackTrace();
-                                JOptionPane.showMessageDialog(SalesInvoiceForm.this, ex.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
-                            }
+                        if (dlg.isItemSelected()) {
+                            tableModel.setValueAt(dlg.getSelectedItemName(), row, 2);
+                            tableModel.setValueAt(dlg.getSelectedItemCode(), row, 3);
+                            tableModel.setValueAt(dlg.getSelectedUnitType(), row, 4);
+                            tableModel.setValueAt(String.format("%,.2f", dlg.getSelectedSalePrice()), row, 7);
                         }
                     }
                 }
@@ -226,7 +214,7 @@ public class SalesInvoiceForm extends JFrame {
         JButton btnPreviewPrint = new JButton("معاينة وطباعة");
         btnPreviewPrint.addActionListener(e -> previewInvoice());
         JButton btnPostInvoice = new JButton("حفظ وترحيل");
-        btnPostInvoice.setBackground(new Color(16, 185, 129));
+        btnPostInvoice.setBackground(new Color(34, 139, 34));
         btnPostInvoice.setForeground(Color.WHITE);
         btnPostInvoice.setOpaque(true);
         btnPostInvoice.setFocusPainted(false);
@@ -238,7 +226,7 @@ public class SalesInvoiceForm extends JFrame {
         Font actionFont = new Font("Tahoma", Font.PLAIN, 13);
         btnCalculate.setFont(actionFont);
         btnPreviewPrint.setFont(actionFont);
-        btnPostInvoice.setFont(new Font("Tahoma", Font.BOLD, 13));
+        btnPostInvoice.setFont(new Font("Tahoma", Font.BOLD, 14));
         btnClear.setFont(actionFont);
         btnClose.setFont(actionFont);
         btnCalculate.setPreferredSize(new Dimension(110, 32));
@@ -258,7 +246,7 @@ public class SalesInvoiceForm extends JFrame {
     private void addTableRow() {
         int row = tableModel.getRowCount();
         Vector<String> rowData = new Vector<>();
-        rowData.add(String.valueOf(row + 1)); rowData.add(""); rowData.add(""); rowData.add(""); rowData.add("COUNT"); rowData.add(""); rowData.add(""); rowData.add(""); rowData.add("0.00");
+        rowData.add(String.valueOf(row + 1)); rowData.add("مخزن المنتجات التامة"); rowData.add(""); rowData.add(""); rowData.add("COUNT"); rowData.add(""); rowData.add(""); rowData.add(""); rowData.add("0.00");
         tableModel.addRow(rowData);
         itemTable.setRowSelectionInterval(row, row);
         itemTable.scrollRectToVisible(itemTable.getCellRect(row, 1, true));
@@ -269,22 +257,73 @@ public class SalesInvoiceForm extends JFrame {
         if (r >= 0) { tableModel.removeRow(r); renumberRows(); calculateRowTotals(); }
     }
     private void renumberRows() { for (int i = 0; i < tableModel.getRowCount(); i++) tableModel.setValueAt(String.valueOf(i+1), i, 0); }
-    private void autoFillFromCustomer() {
-        String code = txtCustomerAccount.getText().trim().split(" - ")[0].trim();
-        if (code.isEmpty()) return;
-        String sql = "SELECT item_code, item_name, unit_type FROM inventory_items WHERE inventory_account=? LIMIT 1";
+
+    /**
+     * محرر خلية "اسم الصنف": كتابة تفتح قائمة اقتراحات من جدول الأصناف المخزني المستقل،
+     * والاختيار يملأ الكود ونوع الوحدة والسعر تلقائياً.
+     */
+    private class ItemCellEditor extends DefaultCellEditor {
+        private final JTextField editor;
+        private final JPopupMenu suggestions = new JPopupMenu();
+        private final Timer debounce;
+
+        ItemCellEditor() {
+            super(new JTextField());
+            editor = (JTextField) getComponent();
+            debounce = new Timer(180, e -> showSuggestions());
+            debounce.setRepeats(false);
+            editor.getDocument().addDocumentListener(new DocumentListener() {
+                public void insertUpdate(DocumentEvent e) { debounce.restart(); }
+                public void removeUpdate(DocumentEvent e) { debounce.restart(); }
+                public void changedUpdate(DocumentEvent e) { }
+            });
+        }
+
+        private void showSuggestions() {
+            String text = editor.getText().trim();
+            if (text.isEmpty()) { suggestions.setVisible(false); return; }
+            java.util.List<String[]> found = findItems(text);
+            if (found.isEmpty()) { suggestions.setVisible(false); return; }
+            suggestions.removeAll();
+            for (String[] it : found) {
+                JMenuItem mi = new JMenuItem(it[0] + " - " + it[1] + "  [سعر البيع: " + it[3] + "]");
+                mi.addActionListener(ev -> applyItem(it));
+                suggestions.add(mi);
+            }
+            suggestions.show(editor, 0, editor.getHeight());
+            editor.requestFocusInWindow();
+        }
+
+        private void applyItem(String[] it) {
+            suggestions.setVisible(false);
+            int row = itemTable.getEditingRow();
+            if (row < 0) row = itemTable.getSelectedRow();
+            if (row < 0) return;
+            tableModel.setValueAt(it[1], row, 2);
+            tableModel.setValueAt(it[0], row, 3);
+            tableModel.setValueAt(it[2], row, 4);
+            tableModel.setValueAt(String.format("%,.2f", parseDoubleSafe(it[3])), row, 7);
+            editor.setText(it[1]);
+            stopCellEditing();
+        }
+    }
+
+    private java.util.List<String[]> findItems(String q) {
+        java.util.List<String[]> result = new java.util.ArrayList<>();
+        String sql = "SELECT item_code, item_name, unit_type, default_sale_price FROM inventory_items WHERE item_code LIKE ? OR item_name LIKE ? ORDER BY item_code LIMIT 8";
         try (Connection conn = DatabaseManager.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, code);
-            try (ResultSet rs = ps.executeQuery()) { if (rs.next()) {
-                if (tableModel.getRowCount()==0) addTableRow();
-                tableModel.setValueAt(rs.getString("item_code"), 0, 3);
-                tableModel.setValueAt(rs.getString("item_name"), 0, 2);
-                tableModel.setValueAt(rs.getString("unit_type"), 0, 4);
-                renumberRows(); calculateRowTotals();
-            }}                     } catch (SQLException e) {
-                        e.printStackTrace();
-                        JOptionPane.showMessageDialog(this, e.getMessage(), "خطأ", JOptionPane.ERROR_MESSAGE);
-                    }
+            ps.setString(1, "%" + q + "%");
+            ps.setString(2, "%" + q + "%");
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new String[]{rs.getString("item_code"), rs.getString("item_name"),
+                            rs.getString("unit_type"), rs.getString("default_sale_price")});
+                }
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return result;
     }
     private void calculateRowTotals() {
         if (updatingTotals) return;

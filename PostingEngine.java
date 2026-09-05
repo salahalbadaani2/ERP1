@@ -249,7 +249,7 @@ public class PostingEngine {
                 "SRI-TEST-01",
                 "INV-1001",
                 java.time.LocalDate.now().toString(),
-                "123020001",
+                "123020002",
                 "410201",
                 "220301",
                 "1210301",

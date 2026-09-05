@@ -43,12 +43,16 @@ CREATE TABLE IF NOT EXISTS `chart_of_accounts` (
 -- 3. جدول بطاقة الأصناف والمخزون التام والمواد الخام (inventory_items)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `inventory_items` (
-  `item_code` VARCHAR(50) NOT NULL COMMENT 'كود الصنف الفريد',
-  `item_name` VARCHAR(255) NOT NULL COMMENT 'اسم الصنف التجاري/المصنعي',
+  `id` INT NOT NULL AUTO_INCREMENT COMMENT 'مسلسل',
+  `item_code` VARCHAR(50) NOT NULL COMMENT 'رقم الصنف',
+  `item_name` VARCHAR(255) NOT NULL COMMENT 'اسم الصنف',
+  `item_type` VARCHAR(50) NOT NULL DEFAULT 'منتج تام' COMMENT 'نوع الصنف',
   `category` VARCHAR(100) DEFAULT 'منتجات تامة' COMMENT 'تصنيف الصنف',
   `unit` VARCHAR(50) NOT NULL DEFAULT 'كرتون' COMMENT 'وحدة القياس',
   `unit_type` VARCHAR(10) NOT NULL DEFAULT 'COUNT' COMMENT 'نوع الوحدة: COUNT (عددي) أو WEIGHT (وزني)',
-  `default_sale_price` DECIMAL(15, 2) NOT NULL DEFAULT 0.00 COMMENT 'سعر البيع الافتراضي',
+  `unit_weight` DECIMAL(10, 2) NOT NULL DEFAULT 0.00 COMMENT 'الوزن / الجرام',
+  `default_price` DECIMAL(12, 2) NOT NULL DEFAULT 0.00 COMMENT 'السعر الافتراضي',
+  `default_sale_price` DECIMAL(15, 2) NOT NULL DEFAULT 0.00 COMMENT 'سعر البيع الافتراضي (توافق مع الشاشات)',
   `unit_cost` DECIMAL(15, 2) NOT NULL DEFAULT 0.00 COMMENT 'تكلفة الوحدة المعيارية',
   `current_stock` DECIMAL(15, 2) NOT NULL DEFAULT 0.00 COMMENT 'الرصيد المخزني الحالي',
   `inventory_account` VARCHAR(20) NOT NULL DEFAULT '1210301' COMMENT 'حساب مخزن الصنف الفرعي',
@@ -58,8 +62,9 @@ CREATE TABLE IF NOT EXISTS `inventory_items` (
   `min_stock_level` DECIMAL(15, 4) NOT NULL DEFAULT 0.0000 COMMENT 'حد إعادة الطلب',
   `expiry_date` DATE DEFAULT NULL COMMENT 'تاريخ انتهاء الصلاحية',
   `batch_no` VARCHAR(50) DEFAULT NULL COMMENT 'رقم التشغيلة أو الدفعة',
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`item_code`),
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT 'تاريخ الإضافة',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_item_code` (`item_code`),
   CONSTRAINT `fk_item_inv_acc` FOREIGN KEY (`inventory_account`) REFERENCES `chart_of_accounts` (`account_code`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='دليل الأصناف والمخزون';
 
@@ -497,10 +502,10 @@ INSERT INTO `chart_of_accounts` (`account_code`, `account_name`, `account_type`,
 ON DUPLICATE KEY UPDATE `account_name`=VALUES(`account_name`);
 
 -- إدخال بيانات تجريبية للأصناف المصنعية
-INSERT INTO `inventory_items` (`item_code`, `item_name`, `category`, `unit`, `unit_type`, `default_sale_price`, `unit_cost`, `current_stock`, `inventory_account`, `sales_revenue_account`, `cogs_account`) VALUES
-('ITEM-101', 'عصير برتقال طبيعي 1 لتر - كرتون (12 عبوة)', 'عصائر ومنتجات تامة', 'كرتون', 'COUNT', 250.00, 180.00, 1500.00, '1210301', '410101', '510101'),
-('ITEM-102', 'بسكويت ويفر محشو شوكولاتة (24 علبة)', 'بسكويت وحلويات', 'كرتون', 'COUNT', 180.00, 120.00, 3200.00, '1210301', '410101', '510101'),
-('ITEM-103', 'مياه معدنية نقية 500 مل (24 قارورة)', 'مياه معبأة', 'كرتون', 'COUNT', 80.00, 50.00, 5000.00, '1210301', '410101', '510101')
+INSERT INTO `inventory_items` (`item_code`, `item_name`, `item_type`, `category`, `unit`, `unit_type`, `default_price`, `default_sale_price`, `unit_cost`, `current_stock`, `inventory_account`, `sales_revenue_account`, `cogs_account`) VALUES
+('ITEM-101', 'عصير برتقال طبيعي 1 لتر - كرتون (12 عبوة)', 'منتج تام', 'عصائر ومنتجات تامة', 'كرتون', 'COUNT', 250.00, 250.00, 180.00, 1500.00, '1210301', '410101', '510101'),
+('ITEM-102', 'بسكويت ويفر محشو شوكولاتة (24 علبة)', 'منتج تام', 'بسكويت وحلويات', 'كرتون', 'COUNT', 180.00, 180.00, 120.00, 3200.00, '1210301', '410101', '510101'),
+('ITEM-103', 'مياه معدنية نقية 500 مل (24 قارورة)', 'منتج تام', 'مياه معبأة', 'كرتون', 'COUNT', 80.00, 80.00, 50.00, 5000.00, '1210301', '410101', '510101')
 ON DUPLICATE KEY UPDATE `item_name`=VALUES(`item_name`);
 
 -- الحسابات التشغيلية الإضافية للمصانع الغذائية

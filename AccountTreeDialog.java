@@ -544,10 +544,17 @@ public class AccountTreeDialog extends JFrame {
             DefaultMutableTreeNode node = new DefaultMutableTreeNode(acc);
             nodeMap.put(acc.getCode(), node);
 
-            if (acc.getParentCode() == null || acc.getParentCode().isEmpty() || !nodeMap.containsKey(acc.getParentCode())) {
+            // قاعدة الحسم: حسابات العملاء (تبدأ بـ 123) تُعلق دائماً تحت شجرة العملاء 12302 فقط،
+            // حتى لو كان حقل الأب في القاعدة منحرفاً إلى حساب آخر.
+            String effectiveParent = acc.getParentCode();
+            if (acc.getCode().length() > 5 && acc.getCode().startsWith("123")) {
+                effectiveParent = "12302";
+            }
+
+            if (effectiveParent == null || effectiveParent.isEmpty() || !nodeMap.containsKey(effectiveParent)) {
                 rootNode.add(node);
             } else {
-                DefaultMutableTreeNode parentNode = nodeMap.get(acc.getParentCode());
+                DefaultMutableTreeNode parentNode = nodeMap.get(effectiveParent);
                 parentNode.add(node);
             }
         }

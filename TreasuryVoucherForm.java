@@ -171,7 +171,7 @@ public class TreasuryVoucherForm extends JFrame {
         // الحساب المقابل (عميل / مورد / مصروف)
         panel.add(new JLabel("الحساب المقابل (العميل / المورد / الحساب الفرعي):"));
         JPanel targetBox = new JPanel(new BorderLayout(5, 0));
-        txtTargetAccount = new JTextField("123020001");
+        txtTargetAccount = new JTextField("123020002");
         btnBrowseTarget = new JButton("دليل الحسابات");
         btnBrowseTarget.addActionListener(e -> browseAccount(txtTargetAccount, null));
         targetBox.add(txtTargetAccount, BorderLayout.CENTER);
@@ -195,7 +195,7 @@ public class TreasuryVoucherForm extends JFrame {
         txtNarration.setText("استلام دفعة نقدية لحساب العميل بموجب سند القبض");
         panel.add(new JScrollPane(txtNarration));
 
-        lblTargetAccountName = new JLabel("الطرف المقابل: شركة الأمل للتوزيع والتجارة (123020001)");
+        lblTargetAccountName = new JLabel("الطرف المقابل: شركة البحر المتوسط (123020002)");
         lblTargetAccountName.setFont(new Font("Tahoma", Font.BOLD, 11));
         lblTargetAccountName.setForeground(new Color(37, 99, 235));
         panel.add(lblTargetAccountName);
@@ -217,7 +217,7 @@ public class TreasuryVoucherForm extends JFrame {
         lblDebitAccountEffect.setFont(new Font("Tahoma", Font.BOLD, 12));
         lblDebitAccountEffect.setForeground(new Color(16, 185, 129));
 
-        lblCreditAccountEffect = new JLabel("• الطرف الدائن (إلى حـ/): العملاء - شركة الأمل (123020001) بمبلغ 575.00 YER [تخفيض مديونية]");
+        lblCreditAccountEffect = new JLabel("• الطرف الدائن (إلى حـ/): العملاء - شركة البحر المتوسط (123020002) بمبلغ 575.00 YER [تخفيض مديونية]");
         lblCreditAccountEffect.setFont(new Font("Tahoma", Font.BOLD, 12));
         lblCreditAccountEffect.setForeground(new Color(37, 99, 235));
 

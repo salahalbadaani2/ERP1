@@ -138,8 +138,9 @@ public class DatabaseManager {
 
             // بطاقة الأصناف والمخزون: تعتمد عليها شاشات الأصناف والمخازن وحركات البيع.
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS inventory_items ("
-                    + "item_code VARCHAR(50) PRIMARY KEY, item_name VARCHAR(255) NOT NULL, "
-                    + "category VARCHAR(100) DEFAULT 'منتجات تامة', unit VARCHAR(50) NOT NULL DEFAULT 'وحدة', "
+                    + "id INT AUTO_INCREMENT PRIMARY KEY, item_code VARCHAR(50) NOT NULL UNIQUE, item_name VARCHAR(255) NOT NULL, "
+                    + "item_type VARCHAR(50) NOT NULL DEFAULT 'منتج تام', category VARCHAR(100) DEFAULT 'منتجات تامة', unit VARCHAR(50) NOT NULL DEFAULT 'وحدة', "
+                    + "unit_type VARCHAR(10) NOT NULL DEFAULT 'COUNT', unit_weight DECIMAL(10,2) NOT NULL DEFAULT 0, default_price DECIMAL(12,2) NOT NULL DEFAULT 0, "
                     + "default_sale_price DECIMAL(18,4) NOT NULL DEFAULT 0, unit_cost DECIMAL(18,4) NOT NULL DEFAULT 0, "
                     + "current_stock DECIMAL(18,4) NOT NULL DEFAULT 0, inventory_account VARCHAR(20) DEFAULT '1210301', "
                     + "sales_revenue_account VARCHAR(20) DEFAULT '410101', cogs_account VARCHAR(20) DEFAULT '510101', "
